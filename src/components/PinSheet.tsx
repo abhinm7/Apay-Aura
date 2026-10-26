@@ -112,7 +112,7 @@ export default function PinSheet({ open, mode, title, subtitle, onClose, onSubmi
           {busy ? <span className="text-muted">Checking…</span> : error}
         </p>
 
-        <div className="mt-3 grid grid-cols-3 gap-2">
+        <div className="mt-3 grid grid-cols-3 gap-2.5">
           {["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "back"].map((k, i) =>
             k === "" ? (
               <span key={i} />
@@ -123,7 +123,7 @@ export default function PinSheet({ open, mode, title, subtitle, onClose, onSubmi
                 onClick={() => press(k)}
                 disabled={busy}
                 aria-label={k === "back" ? "Delete" : k}
-                className="flex h-14 items-center justify-center rounded-2xl text-2xl font-medium active:bg-accent-soft disabled:opacity-50"
+                className="flex h-14 items-center justify-center rounded-2xl text-xl font-normal text-muted active:bg-accent-soft disabled:opacity-50"
               >
                 {k === "back" ? <BackspaceIcon /> : k}
               </button>
