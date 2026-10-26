@@ -1,26 +1,75 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #f5f5f7;
+  --surface: #ffffff;
+  --ink: #111114;
+  --muted: #6e6e78;
+  --line: #e6e6eb;
+  --brand: #0f2a5c;
+  --brand-light: #3b9ae8;
+  --accent: #6a4cff;
+  --accent-soft: #eeeaff;
+  --on-accent: #ffffff;
+  --danger: #e5484d;
+  --success: #17a05d;
+}
+
+/* Light is the default; dark is opt-in via <html data-theme="dark"> (settings). */
+:root[data-theme="dark"] {
+  --bg: #0b0b0e;
+  --surface: #16161b;
+  --ink: #f2f2f5;
+  --muted: #9b9ba6;
+  --line: #26262e;
+  --brand: #8fb0ff;
+  --brand-light: #c2e2ff;
+  --accent: #8a72ff;
+  --accent-soft: #211b3b;
+  --on-accent: #ffffff;
+  --danger: #ff6369;
+  --success: #3dd68c;
+  color-scheme: dark;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-brand: var(--brand);
+  --color-brand-light: var(--brand-light);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
   --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-cormorant);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-tap-highlight-color: transparent;
 }
+
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-6px); }
+  75% { transform: translateX(6px); }
+}
+
+.animate-sheet { animation: sheet-up 220ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.animate-fade { animation: fade-in 180ms ease-out; }
+.animate-shake { animation: shake 200ms ease-in-out 2; }
