@@ -78,6 +78,41 @@ export const BackspaceIcon = (p: P) => (
   </Base>
 );
 
+export const ScanIcon = (p: P) => (
+  <Base {...p}>
+    <path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3M7 12h10" />
+  </Base>
+);
+
+export const QrIcon = (p: P) => (
+  <Base {...p}>
+    <rect x="3" y="3" width="7" height="7" rx="1" />
+    <rect x="14" y="3" width="7" height="7" rx="1" />
+    <rect x="3" y="14" width="7" height="7" rx="1" />
+    <path d="M14 14h3v3h-3zM20 14v.01M14 20v.01M17 20h4v-3" />
+  </Base>
+);
+
+export const HistoryIcon = (p: P) => (
+  <Base {...p}>
+    <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+    <path d="M3 3v5h5M12 7v5l3 2" />
+  </Base>
+);
+
+export const LoanIcon = (p: P) => (
+  <Base {...p}>
+    <circle cx="9" cy="9" r="6" />
+    <path d="M15.6 9.4A6 6 0 1 1 9.4 15.6M9 6.5v5M6.5 9h5" />
+  </Base>
+);
+
+export const MenuIcon = (p: P) => (
+  <Base {...p}>
+    <path d="M4 7h16M4 12h16M4 17h16" />
+  </Base>
+);
+
 export const BellIcon = (p: P) => (
   <Base {...p}>
     <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0" />

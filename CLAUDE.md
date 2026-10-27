@@ -12,6 +12,8 @@ UPI-style, mobile-first web app for sending "aura" (✦) to friends. Next.js 15 
 - `users.verified` is set manually in the DB (no UI/API). Render names with `<VerifiedName>` (`src/components/VerifiedName.tsx`) so the badge shows.
 - Schema changes: add `ALTER TABLE ... IF NOT EXISTS` lines to `db/schema.sql` (it's re-run by `db:migrate`).
 - Push notifications: `web-push` with VAPID keys from env. Server sends via `notifyUser()` (`src/lib/push.ts`) inside `after()` in the chat and pay routes; never let push failures fail a request. Service worker is `public/sw.js` (skips the notification if that chat is focused). Browser side is `src/lib/pushClient.ts`; `NotificationPrompt` on home asks permission; logout unsubscribes the device.
+- Quick actions under the balance (`QuickActions`): Scan (`ScanSheet`, camera + `jsqr`), Receive (`ReceiveSheet`, `qrcode`), History (`/history`, `listPayments()`), Aura Loan (coming-soon sheet). Receive QRs encode `payLink()` = `<origin>/chat/<handle>?pay=1` (`src/lib/qr.ts`); `?pay=1` opens the pay sheet in `ChatView`.
+- Home menu (`HomeMenu`, hamburger top-right) holds Sign out. `NotificationPrompt` is temporarily commented out in `src/app/page.tsx`.
 - Chat: text and payments share the `messages` table; client polls `GET /api/chat/[handle]?after=<id>` every 3s.
 
 ## Status (2026-10-26)

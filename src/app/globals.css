@@ -70,6 +70,10 @@ body {
   75% { transform: translateX(6px); }
 }
 
+/* Scrolls normally, just without a visible scrollbar. */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
 .animate-sheet { animation: sheet-up 220ms cubic-bezier(0.2, 0.8, 0.2, 1); }
 .animate-fade { animation: fade-in 180ms ease-out; }
 .animate-shake { animation: shake 200ms ease-in-out 2; }

@@ -4,7 +4,9 @@ import BalanceCard from "@/components/BalanceCard";
 import FriendSearch from "@/components/FriendSearch";
 import FriendsGrid from "@/components/FriendsGrid";
 import HomeHeader from "@/components/HomeHeader";
-import NotificationPrompt from "@/components/NotificationPrompt";
+import HomeMenu from "@/components/HomeMenu";
+// import NotificationPrompt from "@/components/NotificationPrompt";
+import QuickActions from "@/components/QuickActions";
 import { getUserById, listFriends } from "@/lib/queries";
 import { currentUserId } from "@/lib/session";
 
@@ -25,10 +27,13 @@ export default async function Home() {
     <main className="flex flex-col gap-7 px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-10">
       <div className="flex items-center justify-between">
         <Wordmark />
+        <HomeMenu />
       </div>
       <HomeHeader name={user.name} handle={user.handle} verified={user.verified} />
       <BalanceCard hasPin={user.hasPin} />
-      <NotificationPrompt />
+      <QuickActions name={user.name} handle={user.handle} verified={user.verified} />
+      {/* Push notifications temporarily disabled: uncomment to bring the prompt back. */}
+      {/* <NotificationPrompt /> */}
       <Divider />
       <FriendsGrid friends={friends} />
       <Divider />

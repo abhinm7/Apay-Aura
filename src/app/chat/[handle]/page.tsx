@@ -5,7 +5,13 @@ import ChatView from "./ChatView";
 
 export const dynamic = "force-dynamic";
 
-export default async function ChatPage({ params }: { params: Promise<{ handle: string }> }) {
+export default async function ChatPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ handle: string }>;
+  searchParams: Promise<{ pay?: string }>;
+}) {
   const me = await currentUserId();
   const user = me ? await getUserById(me) : null;
   if (!user) redirect("/api/auth/logout");
@@ -21,6 +27,7 @@ export default async function ChatPage({ params }: { params: Promise<{ handle: s
       friend={{ name: friend.name, handle: friend.handle, verified: friend.verified }}
       hasPin={user.hasPin}
       initialMessages={messages}
+      openPay={(await searchParams).pay === "1"}
     />
   );
 }

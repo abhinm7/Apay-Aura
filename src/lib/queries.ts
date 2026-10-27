@@ -97,6 +97,35 @@ export async function listMessages(me: string, other: string, afterId?: string) 
   return rows.map(toMessage);
 }
 
+export type Payment = {
+  id: string;
+  sent: boolean;
+  amount: number;
+  note: string;
+  createdAt: string;
+  other: Friend;
+};
+
+// All aura sent and received, newest first.
+export async function listPayments(me: string, limit = 200): Promise<Payment[]> {
+  const rows = await db()`
+    SELECT m.id, m.sender_id = ${me} AS sent, m.amount, m.body, m.created_at,
+           u.name, u.handle, u.verified
+    FROM messages m
+    JOIN users u ON u.id = CASE WHEN m.sender_id = ${me} THEN m.receiver_id ELSE m.sender_id END
+    WHERE m.kind = 'payment' AND (m.sender_id = ${me} OR m.receiver_id = ${me})
+    ORDER BY m.id DESC
+    LIMIT ${limit}`;
+  return rows.map((r) => ({
+    id: String(r.id),
+    sent: r.sent,
+    amount: r.amount,
+    note: r.body,
+    createdAt: new Date(r.created_at).toISOString(),
+    other: { name: r.name, handle: r.handle, verified: r.verified },
+  }));
+}
+
 export async function insertTextMessage(from: string, to: string, body: string) {
   const rows = await db()`
     INSERT INTO messages (sender_id, receiver_id, kind, body) VALUES (${from}, ${to}, 'text', ${body})

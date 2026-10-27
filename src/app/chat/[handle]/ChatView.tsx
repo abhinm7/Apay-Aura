@@ -25,15 +25,16 @@ function dayLabel(iso: string) {
   return d.toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" });
 }
 
-type Props = { friend: Friend; hasPin: boolean; initialMessages: Message[] };
+// openPay: arrived from a scanned QR (?pay=1), so start on the pay screen.
+type Props = { friend: Friend; hasPin: boolean; initialMessages: Message[]; openPay?: boolean };
 
-export default function ChatView({ friend, hasPin: initialHasPin, initialMessages }: Props) {
+export default function ChatView({ friend, hasPin: initialHasPin, initialMessages, openPay = false }: Props) {
   const [messages, setMessages] = useState(initialMessages);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [hasPin, setHasPin] = useState(initialHasPin);
 
-  const [payOpen, setPayOpen] = useState(false);
+  const [payOpen, setPayOpen] = useState(openPay);
   const [pinOpen, setPinOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
@@ -66,6 +67,11 @@ export default function ChatView({ friend, hasPin: initialHasPin, initialMessage
     return () => clearInterval(poll);
   }, [friend.handle, merge]);
 
+  // Drop ?pay=1 so a reload doesn't reopen the pay screen.
+  useEffect(() => {
+    if (openPay) window.history.replaceState(null, "", `/chat/${friend.handle}`);
+  }, [openPay, friend.handle]);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });
   }, [messages.length]);
@@ -95,6 +101,29 @@ export default function ChatView({ friend, hasPin: initialHasPin, initialMessage
     setPayError(null);
     setPayOpen(false);
     setPinOpen(true);
+    primeTune();
+  }
+
+  // The success tune plays after a network call, which iOS Safari treats as
+  // autoplay. Starting it muted inside this tap unlocks it for later.
+  const tune = useRef<HTMLAudioElement | null>(null);
+  function primeTune() {
+    if (!tune.current) tune.current = new Audio("/paytune.mp3");
+    const a = tune.current;
+    a.muted = true;
+    a.play()
+      .then(() => {
+        a.pause();
+        a.currentTime = 0;
+        a.muted = false;
+      })
+      .catch(() => {});
+  }
+  function playTune() {
+    const a = tune.current ?? new Audio("/paytune.mp3");
+    a.muted = false;
+    a.currentTime = 0;
+    a.play().catch(() => {});
   }
 
   async function pay(pin: string) {
@@ -107,6 +136,7 @@ export default function ChatView({ friend, hasPin: initialHasPin, initialMessage
       merge([res.message]);
       setPinOpen(false);
       setSent(amountNum);
+      playTune();
       setAmount("");
       setNote("");
       setTimeout(() => setSent(null), 1800);
@@ -135,7 +165,7 @@ export default function ChatView({ friend, hasPin: initialHasPin, initialMessage
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div className="no-scrollbar flex-1 overflow-y-auto px-4 py-4">
         {messages.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
             <Avatar name={friend.name} seed={friend.handle} size={72} />
