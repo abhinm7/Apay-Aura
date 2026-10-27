@@ -12,12 +12,22 @@ type Props = {
   mode: "enter" | "create";
   title: string;
   subtitle?: string;
+  // Heading for the first step of "create" (e.g. when changing an existing PIN).
+  createHeading?: string;
   onClose: () => void;
   // Resolve with an error message to keep the sheet open, or null on success.
   onSubmit: (pin: string) => Promise<string | null>;
 };
 
-export default function PinSheet({ open, mode, title, subtitle, onClose, onSubmit }: Props) {
+export default function PinSheet({
+  open,
+  mode,
+  title,
+  subtitle,
+  createHeading = "Create your Aura PIN",
+  onClose,
+  onSubmit,
+}: Props) {
   const [digits, setDigits] = useState("");
   const [first, setFirst] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +42,7 @@ export default function PinSheet({ open, mode, title, subtitle, onClose, onSubmi
   }, [open]);
 
   const confirming = mode === "create" && first !== null;
-  const heading = mode === "create" ? (confirming ? "Confirm your Aura PIN" : "Create your Aura PIN") : title;
+  const heading = mode === "create" ? (confirming ? "Confirm your Aura PIN" : createHeading) : title;
   const hint =
     mode === "create"
       ? confirming

@@ -8,11 +8,14 @@ import Sheet from "@/components/Sheet";
 import VerifiedName from "@/components/VerifiedName";
 import { BackIcon, CheckIcon, SendIcon } from "@/components/icons";
 import { api, errorMessage } from "@/lib/client";
-import type { Friend, Message } from "@/lib/queries";
+import type { Activity, Friend, Message } from "@/lib/queries";
 import { auraTax, TAX_PERCENT, TAX_THRESHOLD } from "@/lib/tax";
 import { auraId } from "@/lib/validate";
 
 const POLL_MS = 3000;
+// Typing stops counting after this much quiet; activity heartbeats are re-sent this often.
+const ACTIVITY_IDLE_MS = 4000;
+const HEARTBEAT_MS = 2500;
 
 const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
@@ -42,6 +45,54 @@ export default function ChatView({ friend, hasPin: initialHasPin, initialMessage
   const [payError, setPayError] = useState<string | null>(null);
   const [sent, setSent] = useState<number | null>(null);
 
+  // What the friend is doing right now (from polling), and what we report about ourselves.
+  const [friendActivity, setFriendActivity] = useState<Activity | null>(null);
+  const [typing, setTyping] = useState(false);
+  const typingIdle = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function onType(value: string) {
+    setText(value);
+    setTyping(value.trim().length > 0);
+    // Stop counting as typing after a few quiet seconds.
+    if (typingIdle.current) clearTimeout(typingIdle.current);
+    typingIdle.current = setTimeout(() => setTyping(false), ACTIVITY_IDLE_MS);
+  }
+
+  // Report our activity: re-send it while it lasts (the server forgets it after
+  // a few seconds), and clear it when it ends or we leave the chat.
+  const myActivity: Activity | null = payOpen || pinOpen ? "paying" : typing ? "typing" : null;
+  const reported = useRef<Activity | null>(null);
+  useEffect(() => {
+    const send = (kind: Activity | null) => {
+      reported.current = kind;
+      fetch(`/api/chat/${friend.handle}/activity`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind }),
+        keepalive: true,
+      }).catch(() => {});
+    };
+    if (!myActivity) {
+      if (reported.current) send(null);
+      return;
+    }
+    send(myActivity);
+    const beat = setInterval(() => send(myActivity), HEARTBEAT_MS);
+    return () => clearInterval(beat);
+  }, [myActivity, friend.handle]);
+  useEffect(() => {
+    const handle = friend.handle;
+    return () => {
+      if (reported.current)
+        fetch(`/api/chat/${handle}/activity`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind: null }),
+          keepalive: true,
+        }).catch(() => {});
+    };
+  }, [friend.handle]);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const lastId = useRef(initialMessages.at(-1)?.id ?? "0");
 
@@ -59,8 +110,11 @@ export default function ChatView({ friend, hasPin: initialHasPin, initialMessage
     const poll = setInterval(async () => {
       if (document.hidden) return;
       try {
-        const res = await api<{ messages: Message[] }>(`/api/chat/${friend.handle}?after=${lastId.current}`);
+        const res = await api<{ messages: Message[]; activity: Activity | null }>(
+          `/api/chat/${friend.handle}?after=${lastId.current}`,
+        );
         merge(res.messages);
+        setFriendActivity(res.activity);
       } catch {
         // Try again on the next tick.
       }
@@ -86,6 +140,7 @@ export default function ChatView({ friend, hasPin: initialHasPin, initialMessage
       const res = await api<{ message: Message }>(`/api/chat/${friend.handle}`, { text: body });
       merge([res.message]);
       setText("");
+      setTyping(false);
     } catch (err) {
       alert(errorMessage(err));
     } finally {
@@ -168,7 +223,13 @@ export default function ChatView({ friend, hasPin: initialHasPin, initialMessage
         <Avatar name={friend.name} seed={friend.handle} size={38} />
         <div className="min-w-0">
           <VerifiedName name={friend.name} verified={friend.verified} className="text-[15px] font-semibold" />
-          <p className="truncate text-xs text-muted">{auraId(friend.handle)}</p>
+          {friendActivity ? (
+            <p className="truncate text-xs font-medium text-accent" aria-live="polite">
+              {friendActivity === "paying" ? "attempting to pay…" : "typing…"}
+            </p>
+          ) : (
+            <p className="truncate text-xs text-muted">{auraId(friend.handle)}</p>
+          )}
         </div>
       </header>
 
@@ -214,7 +275,7 @@ export default function ChatView({ friend, hasPin: initialHasPin, initialMessage
         </button>
         <input
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => onType(e.target.value)}
           placeholder="Message"
           maxLength={1000}
           className="h-11 min-w-0 flex-1 rounded-full border border-line bg-bg px-4 text-[15px] outline-none placeholder:text-muted focus:border-accent"

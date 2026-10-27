@@ -1,13 +1,18 @@
 "use client";
 
+import { ChevronRight } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/client";
 import { disablePush, enablePush, pushStatus, type PushStatus } from "@/lib/pushClient";
+import { auraId } from "@/lib/validate";
+import Avatar from "./Avatar";
 import { BellIcon, LogoutIcon, MenuIcon } from "./icons";
+import VerifiedName from "./VerifiedName";
 
-// Hamburger in the top bar; holds notifications and sign out.
-export default function HomeMenu() {
+// Hamburger in the top bar: profile link, notifications and sign out.
+export default function HomeMenu({ name, handle, verified }: { name: string; handle: string; verified: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [push, setPush] = useState<PushStatus>("unsupported");
@@ -68,8 +73,20 @@ export default function HomeMenu() {
       {open && (
         <div
           role="menu"
-          className="animate-fade absolute top-11 right-0 z-40 w-60 overflow-hidden rounded-2xl border border-line bg-surface py-1 shadow-lg"
+          className="animate-fade absolute top-11 right-0 z-40 w-64 overflow-hidden rounded-2xl border border-line bg-surface py-1 shadow-lg"
         >
+          <Link
+            href="/profile"
+            role="menuitem"
+            className="flex items-center gap-3 border-b border-line px-4 py-3 active:bg-line"
+          >
+            <Avatar name={name} seed={handle} size={40} />
+            <span className="min-w-0 flex-1">
+              <VerifiedName name={name} verified={verified} className="text-[15px] font-semibold" />
+              <span className="block truncate text-xs text-muted">{auraId(handle)}</span>
+            </span>
+            <ChevronRight size={18} className="shrink-0 text-muted" />
+          </Link>
           {push !== "unsupported" && (
             <button
               type="button"

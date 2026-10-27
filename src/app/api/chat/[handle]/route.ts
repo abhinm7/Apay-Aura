@@ -1,7 +1,16 @@
 import { after, type NextRequest } from "next/server";
 import { fail, ok, readJson, str } from "@/lib/http";
 import { notifyUser } from "@/lib/push";
-import { addFriendship, getUserByHandle, getUserById, insertTextMessage, listMessages } from "@/lib/queries";
+import {
+  addFriendship,
+  getActivity,
+  getUserByHandle,
+  getUserById,
+  insertTextMessage,
+  listMessages,
+  markRead,
+  setActivity,
+} from "@/lib/queries";
 import { currentUserId } from "@/lib/session";
 
 type Ctx = { params: Promise<{ handle: string }> };
@@ -20,7 +29,13 @@ export async function GET(req: NextRequest, ctx: Ctx) {
 
   const after = req.nextUrl.searchParams.get("after");
   const afterId = after && /^\d+$/.test(after) ? after : undefined;
-  return ok({ messages: await listMessages(r.me, r.friend.id, afterId) });
+  const [messages, activity] = await Promise.all([
+    listMessages(r.me, r.friend.id, afterId),
+    getActivity(r.friend.id, r.me),
+  ]);
+  // The chat is open, so anything new from them is now read.
+  if (messages.some((m) => !m.mine)) await markRead(r.me, r.friend.id);
+  return ok({ messages, activity });
 }
 
 export async function POST(req: Request, ctx: Ctx) {
@@ -32,7 +47,7 @@ export async function POST(req: Request, ctx: Ctx) {
   if (text.length > 1000) return fail("Message is too long");
 
   const message = await insertTextMessage(r.me, r.friend.id, text);
-  await addFriendship(r.me, r.friend.id);
+  await Promise.all([addFriendship(r.me, r.friend.id), setActivity(r.me, r.friend.id, null)]);
 
   const friendId = r.friend.id;
   after(async () => {

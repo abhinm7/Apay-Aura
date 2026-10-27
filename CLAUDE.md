@@ -6,6 +6,8 @@ UPI-style, mobile-first web app for sending "aura" (✦) to friends. Next.js 15 
 - Mobile-first UI, clean and minimal. Colors are CSS tokens in `src/app/globals.css` (`bg-bg`, `bg-surface`, `text-ink`, `text-muted`, `border-line`, `bg-accent`, ...) Light is the default; dark tokens apply only under `<html data-theme="dark">` (not OS preference). Use these, not raw colors.
 - Aura amounts are whole integers. New users start with 1000.
 - Aura ID = `handle` column; display as `handle@aura` via `auraId()` in `src/lib/validate.ts`. URLs use the bare handle (`/chat/[handle]`).
+- Multiple Aura IDs: `aura_ids` holds every ID (including the main `users.handle`), max 3 per user; its PK keeps IDs unique across accounts. Look users up with `getUserByHandle()` (resolves any ID, returns the main handle). Signup inserts the user and its `aura_ids` row in one statement. `/chat/<extra-id>` redirects to the main ID.
+- Profile (`/profile`, linked from the top of `HomeMenu`): change name, add/remove/make-main Aura IDs, change password, change/create Aura PIN (`/api/pin/change` verifies the current PIN via `checkPin`).
 - Auth: JWT in httpOnly cookie `apay_session` (`src/lib/token.ts`, `src/lib/session.ts`); `src/middleware.ts` guards pages. API routes call `currentUserId()` themselves.
 - 4-digit Aura PIN, bcrypt-hashed, checked via `checkPin()` (5 wrong → 5-min lock). Balance is only returned by `POST /api/balance` with a PIN.
 - Transfers are one atomic SQL statement in `transferAura()` (`src/lib/queries.ts`). Keep it that way.
@@ -17,6 +19,8 @@ UPI-style, mobile-first web app for sending "aura" (✦) to friends. Next.js 15 
 - Quick actions under the balance (`QuickActions`): Scan (`ScanSheet`, camera + `jsqr`), Receive (`ReceiveSheet`, `qrcode`), History (`/history`, `listPayments()`), Aura Loan (coming-soon sheet). Receive QRs encode `payLink()` = `<origin>/chat/<handle>?pay=1` (`src/lib/qr.ts`); `?pay=1` opens the pay sheet in `ChatView`.
 - Home menu (`HomeMenu`, hamburger top-right) holds a Notifications on/off switch (`pushStatus`/`enablePush`/`disablePush`) and Sign out. The home `NotificationPrompt` card is temporarily commented out in `src/app/page.tsx`.
 - Chat: text and payments share the `messages` table; client polls `GET /api/chat/[handle]?after=<id>` every 3s.
+- Unread: `chat_reads.last_read_id` per (user, friend); opening a chat and polls that return their messages call `markRead()`. `listFriends()` returns `unread`; `FriendsGrid` shows a blue dot.
+- Typing / paying: `chat_activity` heartbeat. `ChatView` POSTs `/api/chat/[handle]/activity` every 2.5s while typing (4s idle cutoff) or while the pay/PIN sheet is open; entries expire after 6s. The chat poll returns the friend's `activity`, shown under their name. Sending a message or payment clears it.
 
 ## Status (2026-10-26)
 - All features built; `tsc`, `lint` and `next build` pass.

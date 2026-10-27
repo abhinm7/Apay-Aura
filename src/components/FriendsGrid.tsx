@@ -16,7 +16,15 @@ export default function FriendsGrid({ friends }: { friends: Friend[] }) {
           {friends.map((f) => (
             <li key={f.handle}>
               <Link href={`/chat/${f.handle}`} className="flex flex-col items-center gap-1.5 active:opacity-70">
-                <Avatar name={f.name} seed={f.handle} size={54} />
+                <span className="relative">
+                  <Avatar name={f.name} seed={f.handle} size={54} />
+                  {f.unread && (
+                    <span
+                      aria-label="Unread"
+                      className="absolute top-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-bg bg-brand-light"
+                    />
+                  )}
+                </span>
                 <VerifiedName
                   name={f.name.split(" ")[0]}
                   verified={f.verified}
