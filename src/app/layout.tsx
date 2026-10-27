@@ -16,8 +16,17 @@ const cormorant = Cormorant_Garamond({
 });
 
 export const metadata: Metadata = {
+  // Share previews need absolute image URLs: set NEXT_PUBLIC_SITE_URL to the deployed address.
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
   title: "apay — Aura Pay",
   description: "Send aura to your friends.",
+  openGraph: {
+    title: "apay — Aura Pay",
+    description: "Send aura to your friends.",
+    siteName: "apay",
+    type: "website",
+  },
+  twitter: { card: "summary_large_image" },
 };
 
 export const viewport: Viewport = {

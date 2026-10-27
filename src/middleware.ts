@@ -14,5 +14,6 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api|_next|favicon.ico|.*\\..*).*)"],
+  // Share images must stay public: link-preview crawlers aren't signed in.
+  matcher: ["/((?!api|_next|favicon.ico|opengraph-image|twitter-image|.*\\..*).*)"],
 };

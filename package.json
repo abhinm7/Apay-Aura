@@ -12,6 +12,7 @@
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0",
     "bcryptjs": "^3.0.3",
+    "geist": "^1.8.2",
     "jose": "^6.2.13",
     "jsqr": "^1.4.0",
     "lucide-react": "^0.577.0",
