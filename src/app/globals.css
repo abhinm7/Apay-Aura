@@ -54,6 +54,8 @@ body {
   background: var(--bg);
   color: var(--ink);
   -webkit-tap-highlight-color: transparent;
+  /* No double-tap zoom. */
+  touch-action: manipulation;
 }
 
 @keyframes sheet-up {

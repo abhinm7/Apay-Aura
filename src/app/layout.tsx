@@ -23,6 +23,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  // App-like: no pinch zoom, and no auto-zoom when an input is focused on iOS.
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: "cover",
   themeColor: "#f5f5f7",
 };
