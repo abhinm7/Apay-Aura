@@ -1,4 +1,5 @@
 import { db } from "./db";
+import { leagueStatus } from "./league";
 import { auraTax } from "./tax";
 
 export type User = { id: string; name: string; handle: string; hasPin: boolean; verified: boolean };
@@ -37,6 +38,11 @@ export async function getUserById(id: string) {
   const rows = await db()`
     SELECT id, name, handle, verified, pin_hash IS NOT NULL AS has_pin FROM users WHERE id = ${id}`;
   return rows[0] ? toUser(rows[0]) : null;
+}
+
+export async function getLeague(id: string) {
+  const rows = await db()`SELECT balance FROM users WHERE id = ${id}`;
+  return leagueStatus(rows[0]?.balance ?? 0);
 }
 
 export async function getUserByHandle(handle: string) {

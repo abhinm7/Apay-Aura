@@ -26,7 +26,7 @@ export default function Sheet({
       <div
         role="dialog"
         aria-modal
-        className="animate-sheet relative w-full max-w-md rounded-t-3xl bg-surface px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl"
+        className="animate-sheet no-scrollbar relative max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-surface px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl"
       >
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-line" />
         {children}

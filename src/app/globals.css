@@ -13,6 +13,19 @@
   --on-accent: #ffffff;
   --danger: #e5484d;
   --success: #17a05d;
+  /* League badge colors */
+  --league-rookie: #7b8190;
+  --league-seeker: #1f9d6b;
+  --league-farmer: #b9661a;
+  --league-master: #2f6fe4;
+  --league-overlord: #8a3fd6;
+  --league-god: #c9940a;
+  /* League badge metals: Aura God gold, Aura Overlord silver */
+  --gold-light: #f6dc92;
+  --gold: #d4af37;
+  --gold-deep: #a8832a;
+  --silver-dark: #7d8592;
+  --silver-mid: #b3bac5;
 }
 
 /* Light is the default; dark is opt-in via <html data-theme="dark"> (settings). */
@@ -29,6 +42,12 @@
   --on-accent: #ffffff;
   --danger: #ff6369;
   --success: #3dd68c;
+  --league-rookie: #a3a8b4;
+  --league-seeker: #45d39b;
+  --league-farmer: #f0a35a;
+  --league-master: #7fa8ff;
+  --league-overlord: #be8cff;
+  --league-god: #ffd45c;
   color-scheme: dark;
 }
 
@@ -45,6 +64,12 @@
   --color-on-accent: var(--on-accent);
   --color-danger: var(--danger);
   --color-success: var(--success);
+  --color-league-rookie: var(--league-rookie);
+  --color-league-seeker: var(--league-seeker);
+  --color-league-farmer: var(--league-farmer);
+  --color-league-master: var(--league-master);
+  --color-league-overlord: var(--league-overlord);
+  --color-league-god: var(--league-god);
   --font-sans: var(--font-geist-sans);
   --font-display: var(--font-cormorant);
 }
@@ -70,6 +95,48 @@ body {
   0%, 100% { transform: translateX(0); }
   25% { transform: translateX(-6px); }
   75% { transform: translateX(6px); }
+}
+
+/* Breathing league badges (Aura God = gold, Aura Overlord = silver): a white
+   pill with metallic lettering and a soft halo that slowly fades in and out.
+   Put .breathe + a palette class on the pill and .metal-text on its label. */
+.breathe-gold {
+  --metal-light: var(--gold-light);
+  --metal: var(--gold);
+  --metal-deep: var(--gold-deep);
+}
+.breathe-silver {
+  --metal-light: var(--silver-mid);
+  --metal: var(--silver-dark);
+  --metal-deep: color-mix(in srgb, var(--silver-dark) 70%, #000);
+}
+.breathe {
+  background: #fff;
+  animation: breathe 3.6s ease-in-out infinite;
+}
+@keyframes breathe {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--metal) 30%, transparent),
+      0 0 0 0 transparent;
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--metal) 45%, transparent),
+      0 0 12px 2px color-mix(in srgb, var(--metal) 40%, transparent);
+  }
+}
+.metal-text {
+  background: linear-gradient(180deg, var(--metal-light), var(--metal) 60%, var(--metal-deep));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+@media (prefers-reduced-motion: reduce) {
+  .breathe {
+    animation: none;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--metal) 35%, transparent);
+  }
 }
 
 /* Scrolls normally, just without a visible scrollbar. */
