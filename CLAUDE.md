@@ -9,11 +9,12 @@ UPI-style, mobile-first web app for sending "aura" (✦) to friends. Next.js 15 
 - Auth: JWT in httpOnly cookie `apay_session` (`src/lib/token.ts`, `src/lib/session.ts`); `src/middleware.ts` guards pages. API routes call `currentUserId()` themselves.
 - 4-digit Aura PIN, bcrypt-hashed, checked via `checkPin()` (5 wrong → 5-min lock). Balance is only returned by `POST /api/balance` with a PIN.
 - Transfers are one atomic SQL statement in `transferAura()` (`src/lib/queries.ts`). Keep it that way.
+- Aura tax (`src/lib/tax.ts`, shared by client and server): transfers >= 10,000 pay 1% (up to 9,999 is tax-free) of the whole amount (floored). Sender is debited `amount`, receiver credited `amount - tax`; `messages.tax` records it. The pay sheet shows a warning and needs a second tap before the PIN.
 - `users.verified` is set manually in the DB (no UI/API). Render names with `<VerifiedName>` (`src/components/VerifiedName.tsx`) so the badge shows.
 - Schema changes: add `ALTER TABLE ... IF NOT EXISTS` lines to `db/schema.sql` (it's re-run by `db:migrate`).
 - Push notifications: `web-push` with VAPID keys from env. Server sends via `notifyUser()` (`src/lib/push.ts`) inside `after()` in the chat and pay routes; never let push failures fail a request. Service worker is `public/sw.js` (skips the notification if that chat is focused). Browser side is `src/lib/pushClient.ts`; `NotificationPrompt` on home asks permission; logout unsubscribes the device.
 - Quick actions under the balance (`QuickActions`): Scan (`ScanSheet`, camera + `jsqr`), Receive (`ReceiveSheet`, `qrcode`), History (`/history`, `listPayments()`), Aura Loan (coming-soon sheet). Receive QRs encode `payLink()` = `<origin>/chat/<handle>?pay=1` (`src/lib/qr.ts`); `?pay=1` opens the pay sheet in `ChatView`.
-- Home menu (`HomeMenu`, hamburger top-right) holds Sign out. `NotificationPrompt` is temporarily commented out in `src/app/page.tsx`.
+- Home menu (`HomeMenu`, hamburger top-right) holds a Notifications on/off switch (`pushStatus`/`enablePush`/`disablePush`) and Sign out. The home `NotificationPrompt` card is temporarily commented out in `src/app/page.tsx`.
 - Chat: text and payments share the `messages` table; client polls `GET /api/chat/[handle]?after=<id>` every 3s.
 
 ## Status (2026-10-26)

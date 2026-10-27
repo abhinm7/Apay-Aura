@@ -3,14 +3,20 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/client";
-import { disablePush } from "@/lib/pushClient";
-import { LogoutIcon, MenuIcon } from "./icons";
+import { disablePush, enablePush, pushStatus, type PushStatus } from "@/lib/pushClient";
+import { BellIcon, LogoutIcon, MenuIcon } from "./icons";
 
-// Hamburger in the top bar; holds account actions (sign out for now).
+// Hamburger in the top bar; holds notifications and sign out.
 export default function HomeMenu() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [push, setPush] = useState<PushStatus>("unsupported");
+  const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    pushStatus().then(setPush).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -26,12 +32,27 @@ export default function HomeMenu() {
     };
   }, [open]);
 
+  async function togglePush() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      if (push === "on") await disablePush();
+      else await enablePush();
+    } catch {
+      // Fall through to re-read the real state.
+    }
+    setPush(await pushStatus().catch(() => push));
+    setBusy(false);
+  }
+
   async function logout() {
     await disablePush().catch(() => {});
     await api("/api/auth/logout", {});
     router.replace("/login");
     router.refresh();
   }
+
+  const item = "flex w-full items-center gap-3 px-4 py-3 text-left text-[15px] active:bg-line disabled:opacity-60";
 
   return (
     <div ref={ref} className="relative">
@@ -47,15 +68,42 @@ export default function HomeMenu() {
       {open && (
         <div
           role="menu"
-          className="animate-fade absolute top-11 right-0 z-40 w-44 overflow-hidden rounded-2xl border border-line bg-surface py-1 shadow-lg"
+          className="animate-fade absolute top-11 right-0 z-40 w-60 overflow-hidden rounded-2xl border border-line bg-surface py-1 shadow-lg"
         >
-          <button
-            type="button"
-            role="menuitem"
-            onClick={logout}
-            className="flex w-full items-center gap-3 px-4 py-3 text-left text-[15px] text-danger active:bg-line"
-          >
-            <LogoutIcon width={18} height={18} /> Sign out
+          {push !== "unsupported" && (
+            <button
+              type="button"
+              role="menuitemcheckbox"
+              aria-checked={push === "on"}
+              onClick={togglePush}
+              disabled={busy || push === "blocked"}
+              className={item}
+            >
+              <BellIcon width={18} height={18} className="shrink-0 text-muted" />
+              <span className="min-w-0 flex-1">
+                Notifications
+                {push === "blocked" && (
+                  <span className="block text-xs text-muted">Blocked — allow in browser settings</span>
+                )}
+              </span>
+              {push !== "blocked" && (
+                // Switch
+                <span
+                  className={`relative h-6 w-10 shrink-0 rounded-full transition-colors ${
+                    push === "on" ? "bg-accent" : "bg-line"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-[left] ${
+                      push === "on" ? "left-[18px]" : "left-0.5"
+                    }`}
+                  />
+                </span>
+              )}
+            </button>
+          )}
+          <button type="button" role="menuitem" onClick={logout} className={`${item} text-danger`}>
+            <LogoutIcon width={18} height={18} className="shrink-0" /> Sign out
           </button>
         </div>
       )}

@@ -44,3 +44,6 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 );
 
 CREATE INDEX IF NOT EXISTS push_subscriptions_user_idx ON push_subscriptions (user_id);
+
+-- Aura tax taken from a payment (see src/lib/tax.ts). Receiver got amount - tax.
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS tax integer NOT NULL DEFAULT 0 CHECK (tax >= 0);

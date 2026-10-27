@@ -5,6 +5,7 @@ import VerifiedName from "@/components/VerifiedName";
 import { BackIcon } from "@/components/icons";
 import { listPayments, type Payment } from "@/lib/queries";
 import { currentUserId } from "@/lib/session";
+import { TAX_PERCENT } from "@/lib/tax";
 
 export const dynamic = "force-dynamic";
 
@@ -56,9 +57,17 @@ export default async function HistoryPage() {
                           {p.note && ` · ${p.note}`}
                         </p>
                       </div>
-                      <span className={`shrink-0 text-[15px] font-semibold tabular-nums ${p.sent ? "text-danger" : "text-success"}`}>
-                        {p.sent ? "−" : "+"} {p.amount.toLocaleString("en-IN")} ✦
-                      </span>
+                      {/* Sent shows what left your balance, received what arrived (after tax). */}
+                      <div className="shrink-0 text-right">
+                        <p className={`text-[15px] font-semibold tabular-nums ${p.sent ? "text-danger" : "text-success"}`}>
+                          {p.sent ? "−" : "+"} {(p.sent ? p.amount : p.amount - p.tax).toLocaleString("en-IN")} ✦
+                        </p>
+                        {p.tax > 0 && (
+                          <p className="text-[11px] text-muted tabular-nums">
+                            {TAX_PERCENT}% tax {p.tax.toLocaleString("en-IN")} ✦
+                          </p>
+                        )}
+                      </div>
                     </Link>
                   </li>
                 ))}

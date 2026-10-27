@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     const sender = await getUserById(me);
     if (!sender) return;
     await notifyUser(friend.id, {
-      title: `You received ✦ ${amount.toLocaleString()}`,
+      title: `You received ✦ ${(amount - result.message.tax).toLocaleString()}`,
       body: note ? `From ${sender.name} · ${note}` : `From ${sender.name}`,
       url: `/chat/${sender.handle}`,
       tag: `pay-${result.message.id}`,

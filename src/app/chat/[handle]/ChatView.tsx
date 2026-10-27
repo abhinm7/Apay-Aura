@@ -9,6 +9,7 @@ import VerifiedName from "@/components/VerifiedName";
 import { BackIcon, CheckIcon, SendIcon } from "@/components/icons";
 import { api, errorMessage } from "@/lib/client";
 import type { Friend, Message } from "@/lib/queries";
+import { auraTax, TAX_PERCENT, TAX_THRESHOLD } from "@/lib/tax";
 import { auraId } from "@/lib/validate";
 
 const POLL_MS = 3000;
@@ -94,10 +95,16 @@ export default function ChatView({ friend, hasPin: initialHasPin, initialMessage
 
   const amountNum = Number(amount);
   const amountValid = Number.isInteger(amountNum) && amountNum > 0;
+  const tax = amountValid ? auraTax(amountNum) : 0;
+
+  // Taxed amounts need a second tap: the first shows the tax warning.
+  const [taxWarned, setTaxWarned] = useState(false);
+  useEffect(() => setTaxWarned(false), [amount, payOpen]);
 
   function proceedToPin(e: React.FormEvent) {
     e.preventDefault();
     if (!amountValid) return setPayError("Enter an amount");
+    if (tax > 0 && !taxWarned) return setTaxWarned(true);
     setPayError(null);
     setPayOpen(false);
     setPinOpen(true);
@@ -229,7 +236,7 @@ export default function ChatView({ friend, hasPin: initialHasPin, initialMessage
           <VerifiedName name={friend.name} verified={friend.verified} className="max-w-full text-base font-semibold" />
           <p className="text-xs text-muted">{auraId(friend.handle)}</p>
 
-          <label className="mt-6 flex items-center justify-center gap-1">
+          <label className="mt-6 flex items-center justify-center gap-1.5">
             <span className="text-3xl text-accent">✦</span>
             <input
               value={amount}
@@ -238,7 +245,9 @@ export default function ChatView({ friend, hasPin: initialHasPin, initialMessage
               placeholder="0"
               autoFocus
               aria-label="Amount"
-              className="w-40 bg-transparent text-center text-5xl font-semibold tabular-nums outline-none placeholder:text-line"
+              // As wide as the digits (1ch = one tabular digit), so ✦ + amount center as one group.
+              style={{ width: `calc(${Math.max(1, amount.length)}ch + 4px)` }}
+              className="bg-transparent text-5xl font-semibold tabular-nums outline-none placeholder:text-line"
             />
           </label>
           <input
@@ -248,6 +257,16 @@ export default function ChatView({ friend, hasPin: initialHasPin, initialMessage
             maxLength={100}
             className="mt-4 h-10 w-56 rounded-full bg-bg px-4 text-center text-sm outline-none placeholder:text-muted"
           />
+          {taxWarned && (
+            <div role="alert" className="mt-4 w-full rounded-2xl bg-accent-soft px-4 py-3 text-left text-sm">
+              <p className="font-semibold">{TAX_PERCENT}% aura tax applies</p>
+              <p className="mt-1 text-muted">
+                Aura transfers of ✦ {TAX_THRESHOLD.toLocaleString()} or more have a {TAX_PERCENT}% aura tax. ✦{" "}
+                {tax.toLocaleString()} will be deducted, so {friend.name.split(" ")[0]} will receive ✦{" "}
+                {(amountNum - tax).toLocaleString()}.
+              </p>
+            </div>
+          )}
           <p className="mt-3 h-5 text-sm text-danger" role="alert">
             {payError}
           </p>
@@ -256,7 +275,7 @@ export default function ChatView({ friend, hasPin: initialHasPin, initialMessage
             disabled={!amountValid}
             className="mt-3 h-12 w-full rounded-2xl bg-accent text-[15px] font-semibold text-on-accent disabled:opacity-40"
           >
-            {amountValid ? `Pay ✦ ${amountNum.toLocaleString()}` : "Pay"}
+            {!amountValid ? "Pay" : taxWarned ? `Continue · Pay ✦ ${amountNum.toLocaleString()}` : `Pay ✦ ${amountNum.toLocaleString()}`}
           </button>
         </form>
       </Sheet>
@@ -277,6 +296,11 @@ export default function ChatView({ friend, hasPin: initialHasPin, initialMessage
           </span>
           <p className="text-3xl font-semibold">✦ {sent.toLocaleString()}</p>
           <p className="text-white/80">sent to {friend.name}</p>
+          {auraTax(sent) > 0 && (
+            <p className="text-sm text-white/70">
+              They received ✦ {(sent - auraTax(sent)).toLocaleString()} after {TAX_PERCENT}% aura tax
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -306,6 +330,15 @@ function PaymentBubble({ m, friendName }: { m: Message; friendName: string }) {
         <span className="mr-1 text-accent">✦</span>
         {m.amount?.toLocaleString()}
       </p>
+      {m.tax > 0 && m.amount !== null && (
+        <div className="mt-1 space-y-0.5 text-[11px] text-muted tabular-nums">
+          <p>Sent ✦ {m.amount.toLocaleString()}</p>
+          <p>Received ✦ {(m.amount - m.tax).toLocaleString()}</p>
+          <p>
+            {TAX_PERCENT}% aura tax ✦ {m.tax.toLocaleString()}
+          </p>
+        </div>
+      )}
       {m.body && <p className="mt-1 text-sm break-words">{m.body}</p>}
       <p className="mt-2 flex items-center gap-1 text-xs text-success">
         <CheckIcon width={14} height={14} strokeWidth={2.5} /> Paid · {time(m.createdAt)}

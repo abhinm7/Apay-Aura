@@ -1,4 +1,5 @@
 import { db } from "./db";
+import { auraTax } from "./tax";
 
 export type User = { id: string; name: string; handle: string; hasPin: boolean; verified: boolean };
 export type Friend = { name: string; handle: string; verified: boolean };
@@ -8,6 +9,7 @@ export type Message = {
   kind: "text" | "payment";
   body: string;
   amount: number | null;
+  tax: number;
   createdAt: string;
 };
 
@@ -27,6 +29,7 @@ const toMessage = (r: Row): Message => ({
   kind: r.kind,
   body: r.body,
   amount: r.amount,
+  tax: r.tax ?? 0,
   createdAt: new Date(r.created_at).toISOString(),
 });
 
@@ -84,13 +87,13 @@ export async function addFriendship(a: string, b: string) {
 export async function listMessages(me: string, other: string, afterId?: string) {
   const rows = afterId
     ? await db()`
-        SELECT id, sender_id = ${me} AS mine, kind, body, amount, created_at FROM messages
+        SELECT id, sender_id = ${me} AS mine, kind, body, amount, tax, created_at FROM messages
         WHERE ((sender_id = ${me} AND receiver_id = ${other}) OR (sender_id = ${other} AND receiver_id = ${me}))
           AND id > ${afterId}
         ORDER BY id`
     : await db()`
         SELECT * FROM (
-          SELECT id, sender_id = ${me} AS mine, kind, body, amount, created_at FROM messages
+          SELECT id, sender_id = ${me} AS mine, kind, body, amount, tax, created_at FROM messages
           WHERE (sender_id = ${me} AND receiver_id = ${other}) OR (sender_id = ${other} AND receiver_id = ${me})
           ORDER BY id DESC LIMIT 100
         ) recent ORDER BY id`;
@@ -101,6 +104,7 @@ export type Payment = {
   id: string;
   sent: boolean;
   amount: number;
+  tax: number;
   note: string;
   createdAt: string;
   other: Friend;
@@ -109,7 +113,7 @@ export type Payment = {
 // All aura sent and received, newest first.
 export async function listPayments(me: string, limit = 200): Promise<Payment[]> {
   const rows = await db()`
-    SELECT m.id, m.sender_id = ${me} AS sent, m.amount, m.body, m.created_at,
+    SELECT m.id, m.sender_id = ${me} AS sent, m.amount, m.tax, m.body, m.created_at,
            u.name, u.handle, u.verified
     FROM messages m
     JOIN users u ON u.id = CASE WHEN m.sender_id = ${me} THEN m.receiver_id ELSE m.sender_id END
@@ -120,6 +124,7 @@ export async function listPayments(me: string, limit = 200): Promise<Payment[]> 
     id: String(r.id),
     sent: r.sent,
     amount: r.amount,
+    tax: r.tax,
     note: r.body,
     createdAt: new Date(r.created_at).toISOString(),
     other: { name: r.name, handle: r.handle, verified: r.verified },
@@ -129,27 +134,29 @@ export async function listPayments(me: string, limit = 200): Promise<Payment[]> 
 export async function insertTextMessage(from: string, to: string, body: string) {
   const rows = await db()`
     INSERT INTO messages (sender_id, receiver_id, kind, body) VALUES (${from}, ${to}, 'text', ${body})
-    RETURNING id, true AS mine, kind, body, amount, created_at`;
+    RETURNING id, true AS mine, kind, body, amount, tax, created_at`;
   return toMessage(rows[0]);
 }
 
 // Debit, credit and the payment message happen in one statement, so the
 // transfer is atomic and the balance check can't race with another payment.
+// The sender pays `amount`; the receiver is credited `amount - tax`.
 export async function transferAura(from: string, to: string, amount: number, note: string) {
+  const tax = auraTax(amount);
   const rows = await db()`
     WITH debit AS (
       UPDATE users SET balance = balance - ${amount}
       WHERE id = ${from} AND balance >= ${amount}
       RETURNING balance
     ), credit AS (
-      UPDATE users SET balance = balance + ${amount}
+      UPDATE users SET balance = balance + ${amount - tax}
       WHERE id = ${to} AND EXISTS (SELECT 1 FROM debit)
       RETURNING id
     ), msg AS (
-      INSERT INTO messages (sender_id, receiver_id, kind, body, amount)
-      SELECT ${from}::uuid, ${to}::uuid, 'payment', ${note}, ${amount}::integer
+      INSERT INTO messages (sender_id, receiver_id, kind, body, amount, tax)
+      SELECT ${from}::uuid, ${to}::uuid, 'payment', ${note}, ${amount}::integer, ${tax}::integer
       WHERE EXISTS (SELECT 1 FROM debit)
-      RETURNING id, true AS mine, kind, body, amount, created_at
+      RETURNING id, true AS mine, kind, body, amount, tax, created_at
     ), link AS (
       INSERT INTO friendships (user_id, friend_id)
       SELECT ${from}::uuid, ${to}::uuid WHERE EXISTS (SELECT 1 FROM debit)

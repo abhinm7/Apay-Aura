@@ -47,6 +47,21 @@ export async function syncPush() {
   await enablePush();
 }
 
+export type PushStatus = "unsupported" | "blocked" | "off" | "on";
+
+// Current state for this device. If it's subscribed, re-links it to the
+// signed-in user (a browser may have been used by another account before).
+export async function pushStatus(): Promise<PushStatus> {
+  if (!pushSupported()) return "unsupported";
+  if (Notification.permission === "denied") return "blocked";
+  if (Notification.permission !== "granted") return "off";
+  const reg = await navigator.serviceWorker.getRegistration();
+  const sub = await reg?.pushManager.getSubscription();
+  if (!sub) return "off";
+  await save(sub).catch(() => {});
+  return "on";
+}
+
 export async function disablePush() {
   if (!pushSupported()) return;
   const reg = await navigator.serviceWorker.getRegistration();
