@@ -139,6 +139,22 @@ body {
   }
 }
 
+/* The three bouncing dots in the chat's "typing…" bubble. */
+.typing-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 9999px;
+  background: currentColor;
+  animation: typing-dot 1s ease-in-out infinite;
+}
+@keyframes typing-dot {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-3px); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .typing-dot { animation: none; opacity: 0.6; }
+}
+
 /* Scrolls normally, just without a visible scrollbar. */
 .no-scrollbar { scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }

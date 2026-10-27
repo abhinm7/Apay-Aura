@@ -129,7 +129,7 @@ export default function ChatView({ friend, hasPin: initialHasPin, initialMessage
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });
-  }, [messages.length]);
+  }, [messages.length, friendActivity]);
 
   async function sendText(e: React.FormEvent) {
     e.preventDefault();
@@ -223,13 +223,7 @@ export default function ChatView({ friend, hasPin: initialHasPin, initialMessage
         <Avatar name={friend.name} seed={friend.handle} size={38} />
         <div className="min-w-0">
           <VerifiedName name={friend.name} verified={friend.verified} className="text-[15px] font-semibold" />
-          {friendActivity ? (
-            <p className="truncate text-xs font-medium text-accent" aria-live="polite">
-              {friendActivity === "paying" ? "attempting to pay…" : "typing…"}
-            </p>
-          ) : (
-            <p className="truncate text-xs text-muted">{auraId(friend.handle)}</p>
-          )}
+          <p className="truncate text-xs text-muted">{auraId(friend.handle)}</p>
         </div>
       </header>
 
@@ -256,6 +250,7 @@ export default function ChatView({ friend, hasPin: initialHasPin, initialMessage
             );
           })}
         </ul>
+        {friendActivity && <ActivityBubble kind={friendActivity} />}
         <div ref={bottomRef} />
       </div>
 
@@ -364,6 +359,29 @@ export default function ChatView({ friend, hasPin: initialHasPin, initialMessage
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// The friend's live "typing…" / "attempting to pay…", shown as an incoming bubble.
+function ActivityBubble({ kind }: { kind: Activity }) {
+  return (
+    <div
+      aria-live="polite"
+      className="animate-fade mt-2 flex w-fit items-center gap-2 self-start rounded-2xl rounded-bl-md bg-surface px-3.5 py-2.5 text-sm text-muted"
+    >
+      {kind === "paying" ? (
+        <>
+          <span className="text-accent">✦</span> attempting to pay
+        </>
+      ) : (
+        "typing"
+      )}
+      <span className="flex items-center gap-0.5" aria-hidden>
+        <span className="typing-dot" />
+        <span className="typing-dot [animation-delay:150ms]" />
+        <span className="typing-dot [animation-delay:300ms]" />
+      </span>
     </div>
   );
 }

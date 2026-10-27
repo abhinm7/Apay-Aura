@@ -1,9 +1,30 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import type { Friend } from "@/lib/queries";
 import Avatar from "./Avatar";
 import VerifiedName from "./VerifiedName";
 
-export default function FriendsGrid({ friends }: { friends: Friend[] }) {
+const POLL_MS = 3000;
+
+export default function FriendsGrid({ friends: initial }: { friends: Friend[] }) {
+  // Re-fetched every few seconds so unread dots and new friends show up live.
+  const [friends, setFriends] = useState(initial);
+  useEffect(() => setFriends(initial), [initial]);
+  useEffect(() => {
+    const poll = setInterval(async () => {
+      if (document.hidden) return;
+      try {
+        const res = await fetch("/api/friends");
+        if (res.ok) setFriends((await res.json()).friends);
+      } catch {
+        // Try again on the next tick.
+      }
+    }, POLL_MS);
+    return () => clearInterval(poll);
+  }, []);
+
   return (
     <section>
       <h2 className="mb-3 text-base font-normal">Aura friends</h2>
