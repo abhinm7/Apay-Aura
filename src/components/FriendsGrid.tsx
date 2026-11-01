@@ -38,7 +38,7 @@ export default function FriendsGrid({ friends: initial }: { friends: Friend[] })
             <li key={f.handle}>
               <Link href={`/chat/${f.handle}`} className="flex flex-col items-center gap-1.5 active:opacity-70">
                 <span className="relative">
-                  <Avatar name={f.name} seed={f.handle} size={54} />
+                  <Avatar name={f.name} seed={f.handle} src={f.avatarUrl} size={54} />
                   {f.unread && (
                     <span
                       aria-label="Unread"

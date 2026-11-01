@@ -220,7 +220,7 @@ export default function ChatView({ friend, hasPin: initialHasPin, initialMessage
         <Link href="/" aria-label="Back" className="flex h-10 w-10 items-center justify-center rounded-full active:bg-line">
           <BackIcon />
         </Link>
-        <Avatar name={friend.name} seed={friend.handle} size={38} />
+        <Avatar name={friend.name} seed={friend.handle} src={friend.avatarUrl} size={38} />
         <div className="min-w-0">
           <VerifiedName name={friend.name} verified={friend.verified} className="text-[15px] font-semibold" />
           <p className="truncate text-xs text-muted">{auraId(friend.handle)}</p>
@@ -230,7 +230,7 @@ export default function ChatView({ friend, hasPin: initialHasPin, initialMessage
       <div className="no-scrollbar flex-1 overflow-y-auto px-4 py-4">
         {messages.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-            <Avatar name={friend.name} seed={friend.handle} size={72} />
+            <Avatar name={friend.name} seed={friend.handle} src={friend.avatarUrl} size={72} />
             <VerifiedName name={friend.name} verified={friend.verified} className="text-base font-semibold" />
             <p className="max-w-60 text-sm text-muted">Say hi or send some aura to start your conversation.</p>
           </div>
@@ -287,7 +287,7 @@ export default function ChatView({ friend, hasPin: initialHasPin, initialMessage
 
       <Sheet open={payOpen} onClose={() => setPayOpen(false)}>
         <form onSubmit={proceedToPin} className="flex flex-col items-center text-center">
-          <Avatar name={friend.name} seed={friend.handle} size={56} />
+          <Avatar name={friend.name} seed={friend.handle} src={friend.avatarUrl} size={56} />
           <p className="mt-2 text-sm text-muted">Paying</p>
           <VerifiedName name={friend.name} verified={friend.verified} className="max-w-full text-base font-semibold" />
           <p className="text-xs text-muted">{auraId(friend.handle)}</p>

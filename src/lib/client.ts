@@ -18,3 +18,34 @@ export class ApiError extends Error {
 }
 
 export const errorMessage = (e: unknown) => (e instanceof Error ? e.message : "Something went wrong");
+
+// Center-crops an image file to a square and shrinks it for upload as a profile picture.
+// WebP where the browser can encode it, JPEG otherwise.
+export async function squareImage(file: File, size = 256): Promise<Blob> {
+  const bitmap = await createImageBitmap(file).catch(() => {
+    throw new Error("Couldn't read that photo. Try a JPG or PNG.");
+  });
+  const side = Math.min(bitmap.width, bitmap.height);
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = Math.min(size, side);
+  canvas
+    .getContext("2d")!
+    .drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+
+  const encode = (type: string) =>
+    new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, 0.85));
+  const webp = await encode("image/webp");
+  const blob = webp?.type === "image/webp" ? webp : await encode("image/jpeg");
+  if (!blob) throw new Error("Couldn't process that photo");
+  return blob;
+}
+
+// Crops, shrinks and uploads a new profile picture; returns its URL.
+export async function uploadAvatar(file: File): Promise<string> {
+  const image = await squareImage(file);
+  const res = await fetch("/api/profile/avatar", { method: "POST", headers: { "Content-Type": image.type }, body: image });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? "Couldn't upload that photo");
+  return data.avatarUrl;
+}

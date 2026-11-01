@@ -28,9 +28,15 @@ export default async function Home() {
       {/* Top bar stays pinned while the page scrolls. */}
       <div className="sticky top-0 z-30 -mx-4 -mb-4 flex items-center justify-between bg-bg/90 px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-3 backdrop-blur-md">
         <Wordmark />
-        <HomeMenu name={user.name} handle={user.handle} verified={user.verified} />
+        <HomeMenu name={user.name} handle={user.handle} verified={user.verified} avatarUrl={user.avatarUrl} />
       </div>
-      <HomeHeader name={user.name} handle={user.handle} verified={user.verified} league={league} />
+      <HomeHeader
+        name={user.name}
+        handle={user.handle}
+        verified={user.verified}
+        avatarUrl={user.avatarUrl}
+        league={league}
+      />
       <BalanceCard hasPin={user.hasPin} />
       <QuickActions name={user.name} handle={user.handle} verified={user.verified} />
       {/* Push notifications temporarily disabled: uncomment to bring the prompt back. */}

@@ -9,7 +9,7 @@ import Avatar from "./Avatar";
 import { CheckIcon, PlusIcon, SearchIcon } from "./icons";
 import VerifiedName from "./VerifiedName";
 
-type Result = { name: string; handle: string; verified: boolean; isFriend: boolean };
+type Result = { name: string; handle: string; verified: boolean; avatarUrl: string | null; isFriend: boolean };
 
 export default function FriendSearch() {
   const router = useRouter();
@@ -76,7 +76,7 @@ export default function FriendSearch() {
           {results.map((r) => (
             <li key={r.handle} className="flex items-center gap-3 px-4 py-3">
               <Link href={`/chat/${r.handle}`} className="flex min-w-0 flex-1 items-center gap-3">
-                <Avatar name={r.name} seed={r.handle} size={40} />
+                <Avatar name={r.name} seed={r.handle} src={r.avatarUrl} size={40} />
                 <div className="min-w-0">
                   <VerifiedName name={r.name} verified={r.verified} className="text-[15px] font-medium" />
                   <p className="truncate text-xs text-muted">{auraId(r.handle)}</p>

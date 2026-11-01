@@ -49,7 +49,7 @@ export default async function HistoryPage() {
                 {g.items.map((p) => (
                   <li key={p.id}>
                     <Link href={`/chat/${p.other.handle}`} className="flex items-center gap-3 px-4 py-3 active:bg-line">
-                      <Avatar name={p.other.name} seed={p.other.handle} size={40} />
+                      <Avatar name={p.other.name} seed={p.other.handle} src={p.other.avatarUrl} size={40} />
                       <div className="min-w-0 flex-1">
                         <VerifiedName name={p.other.name} verified={p.other.verified} className="text-[15px] font-medium" />
                         <p className="truncate text-xs text-muted">

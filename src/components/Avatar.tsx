@@ -4,7 +4,34 @@ function hue(seed: string) {
   return h;
 }
 
-export default function Avatar({ name, seed, size = 48 }: { name: string; seed: string; size?: number }) {
+// Profile picture when there is one, otherwise initials on a color picked from `seed`.
+export default function Avatar({
+  name,
+  seed,
+  src,
+  size = 48,
+}: {
+  name: string;
+  seed: string;
+  src?: string | null;
+  size?: number;
+}) {
+  if (src) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- already a small, CDN-served square
+      <img
+        src={src}
+        alt=""
+        width={size}
+        height={size}
+        loading="lazy"
+        decoding="async"
+        className="shrink-0 rounded-full bg-line object-cover"
+        style={{ width: size, height: size }}
+        aria-hidden
+      />
+    );
+  }
   const initials = name
     .split(/\s+/)
     .filter(Boolean)

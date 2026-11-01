@@ -1,20 +1,20 @@
 "use client";
 
-import { Calendar, ChevronRight, KeyRound, LockKeyhole, Pencil, Phone, Plus, Star, Trash2 } from "lucide-react";
+import { Calendar, Camera, ChevronRight, ImagePlus, KeyRound, LockKeyhole, Pencil, Phone, Plus, Star, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Field, FormError, PrimaryButton } from "@/components/AuthShell";
 import Avatar from "@/components/Avatar";
 import PinSheet from "@/components/PinSheet";
 import Sheet from "@/components/Sheet";
-import VerifiedName from "@/components/VerifiedName";
+import VerifiedName, { VerifiedBadge } from "@/components/VerifiedName";
 import { BackIcon } from "@/components/icons";
-import { api, errorMessage } from "@/lib/client";
+import { api, errorMessage, uploadAvatar } from "@/lib/client";
 import type { Profile } from "@/lib/queries";
 import { auraId } from "@/lib/validate";
 
-type Open = "name" | "addId" | "password" | "pinCurrent" | "pinNew" | "pinCreate" | null;
+type Open = "photo" | "name" | "addId" | "password" | "pinCurrent" | "pinNew" | "pinCreate" | null;
 
 const joined = (iso: string) => new Date(iso).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 const phoneFmt = (p: string) => `+91 ${p.slice(0, 5)} ${p.slice(5)}`;
@@ -35,6 +35,8 @@ export default function ProfileView({
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   // Form fields
   const [name, setName] = useState(profile.name);
@@ -66,6 +68,38 @@ export default function ProfileView({
       setBusy(false);
     }
   }
+
+  // Profile picture: no photo yet goes straight to the picker; otherwise offer change/remove.
+  function editPhoto() {
+    if (uploading) return;
+    if (profile.avatarUrl) show("photo");
+    else fileInput.current?.click();
+  }
+
+  async function uploadPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // so picking the same file again still fires
+    if (!file) return;
+    setOpen(null);
+    setUploading(true);
+    try {
+      const avatarUrl = await uploadAvatar(file);
+      setProfile((p) => ({ ...p, avatarUrl }));
+      done("Profile photo updated");
+    } catch (err) {
+      alert(errorMessage(err));
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  const removePhoto = () =>
+    run(async () => {
+      const res = await fetch("/api/profile/avatar", { method: "DELETE" });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Couldn't remove your photo");
+      setProfile((p) => ({ ...p, avatarUrl: null }));
+      done("Profile photo removed");
+    });
 
   const saveName = (e: React.FormEvent) => {
     e.preventDefault();
@@ -163,7 +197,23 @@ export default function ProfileView({
       </header>
 
       <div className="flex flex-col items-center px-4 pt-8">
-        <Avatar name={profile.name} seed={profile.handle} size={84} />
+        <button
+          type="button"
+          onClick={editPhoto}
+          aria-label={profile.avatarUrl ? "Change profile photo" : "Add profile photo"}
+          className="relative rounded-full active:opacity-80"
+        >
+          <Avatar name={profile.name} seed={profile.handle} src={profile.avatarUrl} size={84} />
+          {uploading && (
+            <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40">
+              <span className="h-6 w-6 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+            </span>
+          )}
+          <span className="absolute -right-0.5 -bottom-0.5 flex h-8 w-8 items-center justify-center rounded-full border-2 border-bg bg-accent text-on-accent">
+            <Camera size={15} />
+          </span>
+        </button>
+        <input ref={fileInput} type="file" accept="image/*" onChange={uploadPhoto} hidden />
         <VerifiedName name={profile.name} verified={profile.verified} className="mt-3 max-w-full text-xl font-semibold" />
         <p className="text-sm text-muted">{auraId(profile.handle)}</p>
       </div>
@@ -233,7 +283,45 @@ export default function ProfileView({
             onClick={() => show(hasPin ? "pinCurrent" : "pinCreate")}
           />
         </Card>
+
+        {/* Verified badge */}
+        <Card title="Verification">
+          <Row
+            icon={<VerifiedBadge size={18} />}
+            label={profile.verified ? "You're verified" : "Get the verified badge"}
+            href="/profile/verify"
+          />
+        </Card>
       </div>
+
+      {/* Profile photo */}
+      <Sheet open={open === "photo"} onClose={() => setOpen(null)}>
+        <div className="flex flex-col gap-4">
+          <h2 className="text-center text-lg font-semibold">Profile photo</h2>
+          <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line">
+            <li>
+              <button
+                type="button"
+                onClick={() => fileInput.current?.click()}
+                className="flex w-full items-center gap-3 px-4 py-3 text-left text-[15px] active:bg-line"
+              >
+                <ImagePlus size={18} className="text-muted" /> Choose new photo
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                onClick={removePhoto}
+                disabled={busy}
+                className="flex w-full items-center gap-3 px-4 py-3 text-left text-[15px] text-danger active:bg-line disabled:opacity-60"
+              >
+                <Trash2 size={18} /> Remove photo
+              </button>
+            </li>
+          </ul>
+          <FormError message={error} />
+        </div>
+      </Sheet>
 
       {/* Change name */}
       <Sheet open={open === "name"} onClose={() => setOpen(null)}>
@@ -345,23 +433,29 @@ function Row({
   label,
   value,
   onClick,
+  href,
 }: {
   icon: React.ReactNode;
   label: string;
   value?: string;
   onClick?: () => void;
+  href?: string;
 }) {
   const inner = (
     <>
       <span className="shrink-0 text-muted">{icon}</span>
       <span className="flex-1 text-[15px]">{label}</span>
       {value && <span className="max-w-[55%] truncate text-sm text-muted">{value}</span>}
-      {onClick && <ChevronRight size={18} className="shrink-0 text-muted" />}
+      {(onClick || href) && <ChevronRight size={18} className="shrink-0 text-muted" />}
     </>
   );
   return (
     <li>
-      {onClick ? (
+      {href ? (
+        <Link href={href} className="flex w-full items-center gap-3 px-4 py-3 text-left active:bg-line">
+          {inner}
+        </Link>
+      ) : onClick ? (
         <button type="button" onClick={onClick} className="flex w-full items-center gap-3 px-4 py-3 text-left active:bg-line">
           {inner}
         </button>

@@ -87,3 +87,17 @@ CREATE TABLE IF NOT EXISTS chat_activity (
   updated_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (user_id, friend_id)
 );
+
+-- Profile picture: a public Vercel Blob URL (see /api/profile/avatar). NULL shows initials.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url text;
+
+-- Bought verified badges (see /profile/verify): the details given and the fee paid.
+-- Paying the fee and setting users.verified happen in one statement (buyVerification()).
+CREATE TABLE IF NOT EXISTS verifications (
+  user_id        uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  address        text NOT NULL,
+  occupation     text NOT NULL CHECK (occupation IN ('employed', 'salaried', 'student')),
+  monthly_income integer NOT NULL CHECK (monthly_income >= 0),
+  fee            integer NOT NULL CHECK (fee >= 0),
+  created_at     timestamptz NOT NULL DEFAULT now()
+);

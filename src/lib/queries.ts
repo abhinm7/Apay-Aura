@@ -1,9 +1,17 @@
 import { db } from "./db";
 import { leagueStatus } from "./league";
 import { auraTax } from "./tax";
+import { VERIFY_FEE, type Occupation } from "./verification";
 
-export type User = { id: string; name: string; handle: string; hasPin: boolean; verified: boolean };
-export type Friend = { name: string; handle: string; verified: boolean; unread?: boolean };
+export type User = {
+  id: string;
+  name: string;
+  handle: string;
+  hasPin: boolean;
+  verified: boolean;
+  avatarUrl: string | null;
+};
+export type Friend = { name: string; handle: string; verified: boolean; avatarUrl: string | null; unread?: boolean };
 export type Activity = "typing" | "paying";
 export type Message = {
   id: string;
@@ -23,6 +31,7 @@ const toUser = (r: Row): User => ({
   handle: r.handle,
   hasPin: r.has_pin,
   verified: r.verified,
+  avatarUrl: r.avatar_url,
 });
 
 const toMessage = (r: Row): Message => ({
@@ -37,7 +46,7 @@ const toMessage = (r: Row): Message => ({
 
 export async function getUserById(id: string) {
   const rows = await db()`
-    SELECT id, name, handle, verified, pin_hash IS NOT NULL AS has_pin FROM users WHERE id = ${id}`;
+    SELECT id, name, handle, verified, avatar_url, pin_hash IS NOT NULL AS has_pin FROM users WHERE id = ${id}`;
   return rows[0] ? toUser(rows[0]) : null;
 }
 
@@ -49,7 +58,7 @@ export async function getLeague(id: string) {
 // Finds a user by any of their Aura IDs; the result's handle is their main one.
 export async function getUserByHandle(handle: string) {
   const rows = await db()`
-    SELECT u.id, u.name, u.handle, u.verified, u.pin_hash IS NOT NULL AS has_pin
+    SELECT u.id, u.name, u.handle, u.verified, u.avatar_url, u.pin_hash IS NOT NULL AS has_pin
     FROM aura_ids a JOIN users u ON u.id = a.user_id
     WHERE a.handle = ${handle.toLowerCase()}`;
   return rows[0] ? toUser(rows[0]) : null;
@@ -62,6 +71,7 @@ export type Profile = {
   handle: string;
   phone: string;
   verified: boolean;
+  avatarUrl: string | null;
   createdAt: string;
   // All Aura IDs, main first.
   auraIds: string[];
@@ -69,7 +79,7 @@ export type Profile = {
 
 export async function getProfile(me: string): Promise<Profile | null> {
   const [u] = await db()`
-    SELECT name, handle, phone, verified, created_at,
+    SELECT name, handle, phone, verified, avatar_url, created_at,
            ARRAY(SELECT a.handle FROM aura_ids a WHERE a.user_id = users.id
                  ORDER BY a.handle = users.handle DESC, a.created_at) AS aura_ids
     FROM users WHERE id = ${me}`;
@@ -79,6 +89,7 @@ export async function getProfile(me: string): Promise<Profile | null> {
     handle: u.handle,
     phone: u.phone,
     verified: u.verified,
+    avatarUrl: u.avatar_url,
     createdAt: new Date(u.created_at).toISOString(),
     auraIds: u.aura_ids,
   };
@@ -86,6 +97,46 @@ export async function getProfile(me: string): Promise<Profile | null> {
 
 // Returns an error message, or null. The insert is a single statement so the
 // per-user limit can't be raced, and the primary key keeps IDs unique.
+// Saves the new profile picture URL (or NULL) and returns the one it replaced,
+// so the caller can delete the old file.
+export async function setAvatarUrl(me: string, url: string | null) {
+  const rows = await db()`
+    UPDATE users u SET avatar_url = ${url}
+    FROM (SELECT avatar_url FROM users WHERE id = ${me}) old
+    WHERE u.id = ${me}
+    RETURNING old.avatar_url AS previous`;
+  return (rows[0]?.previous as string | null) ?? null;
+}
+
+// Debits the fee, sets the badge and saves the details in one statement, so it
+// can't run twice or race with a payment. Needs a profile photo. Returns an
+// error message, or null on success.
+export async function buyVerification(
+  me: string,
+  details: { address: string; occupation: Occupation; monthlyIncome: number },
+) {
+  const rows = await db()`
+    WITH paid AS (
+      UPDATE users SET balance = balance - ${VERIFY_FEE}, verified = true
+      WHERE id = ${me} AND NOT verified AND avatar_url IS NOT NULL AND balance >= ${VERIFY_FEE}
+      RETURNING id
+    ), saved AS (
+      INSERT INTO verifications (user_id, address, occupation, monthly_income, fee)
+      SELECT id, ${details.address}, ${details.occupation}, ${details.monthlyIncome}, ${VERIFY_FEE} FROM paid
+      ON CONFLICT (user_id) DO UPDATE
+        SET address = EXCLUDED.address, occupation = EXCLUDED.occupation,
+            monthly_income = EXCLUDED.monthly_income, fee = EXCLUDED.fee, created_at = now()
+    )
+    SELECT (SELECT count(*) FROM paid) AS paid, verified, avatar_url IS NOT NULL AS has_photo
+    FROM users WHERE id = ${me}`;
+  const r = rows[0];
+  if (!r) return "Account not found";
+  if (Number(r.paid)) return null;
+  if (r.verified) return "You're already verified";
+  if (!r.has_photo) return "Add a profile photo first";
+  return `Not enough aura. You need ✦ ${VERIFY_FEE.toLocaleString()}.`;
+}
+
 export async function addAuraId(me: string, handle: string) {
   try {
     const rows = await db()`
@@ -120,7 +171,7 @@ export async function setMainAuraId(me: string, handle: string) {
 // Most recently active friends first, like the "People" row in GPay.
 export async function listFriends(me: string): Promise<Friend[]> {
   const rows = await db()`
-    SELECT u.name, u.handle, u.verified,
+    SELECT u.name, u.handle, u.verified, u.avatar_url,
            EXISTS (SELECT 1 FROM messages m
                    WHERE m.sender_id = u.id AND m.receiver_id = ${me}
                      AND m.id > COALESCE((SELECT r.last_read_id FROM chat_reads r
@@ -131,7 +182,13 @@ export async function listFriends(me: string): Promise<Friend[]> {
     FROM friendships f JOIN users u ON u.id = f.friend_id
     WHERE f.user_id = ${me}
     ORDER BY active_at DESC`;
-  return rows.map((r) => ({ name: r.name, handle: r.handle, verified: r.verified, unread: r.unread }));
+  return rows.map((r) => ({
+    name: r.name,
+    handle: r.handle,
+    verified: r.verified,
+    avatarUrl: r.avatar_url,
+    unread: r.unread,
+  }));
 }
 
 // Marks everything `other` has sent `me` so far as read.
@@ -168,7 +225,7 @@ export async function getActivity(other: string, me: string): Promise<Activity |
 export async function searchUsers(me: string, q: string) {
   const digits = q.replace(/\D/g, "");
   const rows = await db()`
-    SELECT u.name, u.handle, u.verified,
+    SELECT u.name, u.handle, u.verified, u.avatar_url,
            EXISTS (SELECT 1 FROM friendships f WHERE f.user_id = ${me} AND f.friend_id = u.id) AS is_friend
     FROM users u
     WHERE u.id <> ${me}
@@ -181,6 +238,7 @@ export async function searchUsers(me: string, q: string) {
     name: r.name as string,
     handle: r.handle as string,
     verified: r.verified as boolean,
+    avatarUrl: r.avatar_url as string | null,
     isFriend: r.is_friend as boolean,
   }));
 }
@@ -221,7 +279,7 @@ export type Payment = {
 export async function listPayments(me: string, limit = 200): Promise<Payment[]> {
   const rows = await db()`
     SELECT m.id, m.sender_id = ${me} AS sent, m.amount, m.tax, m.body, m.created_at,
-           u.name, u.handle, u.verified
+           u.name, u.handle, u.verified, u.avatar_url
     FROM messages m
     JOIN users u ON u.id = CASE WHEN m.sender_id = ${me} THEN m.receiver_id ELSE m.sender_id END
     WHERE m.kind = 'payment' AND (m.sender_id = ${me} OR m.receiver_id = ${me})
@@ -234,7 +292,7 @@ export async function listPayments(me: string, limit = 200): Promise<Payment[]> 
     tax: r.tax,
     note: r.body,
     createdAt: new Date(r.created_at).toISOString(),
-    other: { name: r.name, handle: r.handle, verified: r.verified },
+    other: { name: r.name, handle: r.handle, verified: r.verified, avatarUrl: r.avatar_url },
   }));
 }
 

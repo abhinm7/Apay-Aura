@@ -12,7 +12,17 @@ import { BellIcon, LogoutIcon, MenuIcon } from "./icons";
 import VerifiedName from "./VerifiedName";
 
 // Hamburger in the top bar: profile link, notifications and sign out.
-export default function HomeMenu({ name, handle, verified }: { name: string; handle: string; verified: boolean }) {
+export default function HomeMenu({
+  name,
+  handle,
+  verified,
+  avatarUrl,
+}: {
+  name: string;
+  handle: string;
+  verified: boolean;
+  avatarUrl: string | null;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [push, setPush] = useState<PushStatus>("unsupported");
@@ -80,7 +90,7 @@ export default function HomeMenu({ name, handle, verified }: { name: string; han
             role="menuitem"
             className="flex items-center gap-3 border-b border-line px-4 py-3 active:bg-line"
           >
-            <Avatar name={name} seed={handle} size={40} />
+            <Avatar name={name} seed={handle} src={avatarUrl} size={40} />
             <span className="min-w-0 flex-1">
               <VerifiedName name={name} verified={verified} className="text-[15px] font-semibold" />
               <span className="block truncate text-xs text-muted">{auraId(handle)}</span>

@@ -28,7 +28,7 @@ export default async function ChatPage({
 
   return (
     <ChatView
-      friend={{ name: friend.name, handle: friend.handle, verified: friend.verified }}
+      friend={{ name: friend.name, handle: friend.handle, verified: friend.verified, avatarUrl: friend.avatarUrl }}
       hasPin={user.hasPin}
       initialMessages={messages}
       openPay={pay === "1"}
