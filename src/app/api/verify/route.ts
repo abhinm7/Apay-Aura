@@ -1,6 +1,6 @@
 import { fail, ok, readJson, str } from "@/lib/http";
 import { checkPin } from "@/lib/pin";
-import { buyVerification } from "@/lib/queries";
+import { buyVerification, settleLoans } from "@/lib/queries";
 import { currentUserId } from "@/lib/session";
 import { isOccupation, MAX_ADDRESS, MAX_INCOME } from "@/lib/verification";
 
@@ -24,6 +24,7 @@ export async function POST(req: Request) {
   const pinError = await checkPin(me, str(body.pin));
   if (pinError) return fail(pinError, 403);
 
+  await settleLoans(me);
   const error = await buyVerification(me, { address, occupation, monthlyIncome });
   if (error) return fail(error, 402);
   return ok({ verified: true });

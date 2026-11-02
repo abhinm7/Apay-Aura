@@ -2,7 +2,7 @@ import { after } from "next/server";
 import { fail, ok, readJson, str } from "@/lib/http";
 import { checkPin } from "@/lib/pin";
 import { notifyUser } from "@/lib/push";
-import { getUserByHandle, getUserById, setActivity, transferAura } from "@/lib/queries";
+import { getUserByHandle, getUserById, setActivity, settleLoans, transferAura } from "@/lib/queries";
 import { currentUserId } from "@/lib/session";
 
 const MAX_AMOUNT = 100_000;
@@ -25,6 +25,7 @@ export async function POST(req: Request) {
   const pinError = await checkPin(me, str(body.pin));
   if (pinError) return fail(pinError, 403);
 
+  await settleLoans(me);
   const result = await transferAura(me, friend.id, amount, note);
   if (!result) return fail("Not enough aura for this payment", 402);
   await setActivity(me, friend.id, null);

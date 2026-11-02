@@ -4,6 +4,9 @@ import { SESSION_COOKIE, verifyToken } from "@/lib/token";
 const AUTH_PAGES = ["/login", "/signup"];
 
 export async function middleware(req: NextRequest) {
+  // /admin has its own PIN gate and needs no user login.
+  if (req.nextUrl.pathname === "/admin" || req.nextUrl.pathname.startsWith("/admin/")) return NextResponse.next();
+
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const signedIn = token ? Boolean(await verifyToken(token)) : false;
   const onAuthPage = AUTH_PAGES.includes(req.nextUrl.pathname);

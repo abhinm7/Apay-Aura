@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { leagueStatus } from "./league";
+import { APPROVAL_WAIT_MS, INSTANT_APPROVAL_PERCENT, loanQuote, WEEK_MS, type Bank, type BankInput, type Loan } from "./loans";
 import { auraTax } from "./tax";
 import { VERIFY_FEE, type Occupation } from "./verification";
 
@@ -332,4 +333,170 @@ export async function transferAura(from: string, to: string, amount: number, not
     SELECT msg.*, (SELECT balance FROM debit) AS new_balance FROM msg`;
   if (!rows[0]) return null;
   return { message: toMessage(rows[0]), balance: rows[0].new_balance as number };
+}
+
+const toLoan = (r: Row): Loan => ({
+  id: String(r.id),
+  bank: r.bank,
+  amount: r.amount,
+  interest: r.interest,
+  months: r.months,
+  fees: r.fees,
+  received: r.received,
+  total: r.total,
+  weeks: r.weeks,
+  emi: r.emi,
+  emisPaid: r.emis_paid,
+  instantFee: r.instant_fee,
+  status: r.status,
+  createdAt: new Date(r.created_at).toISOString(),
+  approveAt: new Date(r.approve_at).toISOString(),
+  approvedAt: r.approved_at ? new Date(r.approved_at).toISOString() : null,
+  closedAt: r.closed_at ? new Date(r.closed_at).toISOString() : null,
+});
+
+export async function listLoans(me: string): Promise<Loan[]> {
+  const rows = await db()`SELECT * FROM loans WHERE user_id = ${me} ORDER BY id DESC`;
+  return rows.map(toLoan);
+}
+
+// What decides whether a loan application is allowed.
+export async function getLoanEligibility(me: string) {
+  const rows = await db()`SELECT balance, verified FROM users WHERE id = ${me}`;
+  return rows[0] ? { balance: rows[0].balance as number, verified: rows[0].verified as boolean } : null;
+}
+
+// Returns the new pending loan, or null if one with this bank is already pending or ongoing.
+export async function applyLoan(me: string, bank: Bank, amount: number) {
+  const q = loanQuote(amount, bank);
+  try {
+    const rows = await db()`
+      INSERT INTO loans (user_id, bank, amount, interest, months, fees, received, total, weeks, emi, approve_at)
+      VALUES (${me}, ${bank.id}, ${amount}, ${bank.interest}, ${bank.months}, ${q.totalFees}, ${q.received},
+              ${q.total}, ${q.weeks}, ${q.emi}, now() + ${`${APPROVAL_WAIT_MS / 1000} seconds`}::interval)
+      RETURNING *`;
+    return toLoan(rows[0]);
+  } catch (e) {
+    if ((e as { code?: string }).code === "23505") return null;
+    throw e;
+  }
+}
+
+// Brings `me`'s loans up to date: approves (and pays out) pending loans whose wait is
+// over, then takes every weekly EMI that has come due, closing fully repaid loans.
+// EMIs are taken even if the balance goes negative. Call it before anything reads
+// the balance. Each step claims the loan rows first, so concurrent calls can't
+// pay out or charge twice.
+export async function settleLoans(me: string) {
+  await db()`
+    WITH approved AS (
+      UPDATE loans SET status = 'ongoing', approved_at = approve_at
+      WHERE user_id = ${me} AND status = 'pending' AND approve_at <= now()
+      RETURNING received
+    )
+    UPDATE users SET balance = balance + (SELECT sum(received) FROM approved)
+    WHERE id = ${me} AND EXISTS (SELECT 1 FROM approved)`;
+
+  await db()`
+    WITH due AS (
+      SELECT id, emis_paid AS before,
+             LEAST(weeks, floor(extract(epoch FROM now() - approved_at) / ${WEEK_MS / 1000}::numeric)::integer) AS after
+      FROM loans WHERE user_id = ${me} AND status = 'ongoing'
+    ), charged AS (
+      UPDATE loans l SET
+        emis_paid = d.after,
+        status    = CASE WHEN d.after >= l.weeks THEN 'closed' ELSE 'ongoing' END,
+        closed_at = CASE WHEN d.after >= l.weeks THEN l.approved_at + l.weeks * interval '1 week' END
+      FROM due d
+      WHERE l.id = d.id AND l.emis_paid = d.before AND d.after > d.before
+      RETURNING (CASE WHEN d.after >= l.weeks THEN l.total ELSE d.after * l.emi END) - d.before * l.emi AS amount
+    )
+    UPDATE users SET balance = balance - (SELECT sum(amount) FROM charged)
+    WHERE id = ${me} AND EXISTS (SELECT 1 FROM charged)`;
+}
+
+// Skips the wait on a pending loan: takes the instant-approval fee and pays out the
+// loan. Returns an error message, or null on success.
+export async function approveLoanNow(me: string, loanId: string) {
+  const rows = await db()`
+    WITH claimed AS (
+      UPDATE loans SET status = 'ongoing', approved_at = now(), instant_fee = amount * ${INSTANT_APPROVAL_PERCENT}::integer / 100
+      WHERE id = ${loanId} AND user_id = ${me} AND status = 'pending'
+        AND (SELECT balance FROM users WHERE id = ${me}) >= amount * ${INSTANT_APPROVAL_PERCENT}::integer / 100
+      RETURNING instant_fee, received
+    )
+    UPDATE users u SET balance = balance - c.instant_fee + c.received
+    FROM claimed c WHERE u.id = ${me}
+    RETURNING u.id`;
+  if (rows.length) return null;
+  const [loan] = await db()`SELECT status FROM loans WHERE id = ${loanId} AND user_id = ${me}`;
+  if (!loan) return "Loan not found";
+  if (loan.status !== "pending") return "This loan is already approved";
+  return "Not enough aura for the instant approval fee";
+}
+
+// Withdraws a loan that hasn't been approved yet (no aura has moved). Returns false if
+// it's gone or already approved.
+export async function cancelLoan(me: string, loanId: string) {
+  const rows = await db()`
+    DELETE FROM loans WHERE id = ${loanId} AND user_id = ${me} AND status = 'pending' RETURNING id`;
+  return rows.length > 0;
+}
+
+const toBank = (r: Row): Bank => ({
+  id: r.id,
+  name: r.name,
+  interest: r.interest,
+  upTo: r.up_to,
+  months: r.months,
+  verified: r.verified,
+  logoUrl: r.logo_url,
+  active: r.active,
+});
+
+// Every bank, hidden ones included (old loans still need their names), oldest first.
+export async function listBanks(): Promise<Bank[]> {
+  const rows = await db()`SELECT * FROM banks ORDER BY created_at, id`;
+  return rows.map(toBank);
+}
+
+export async function getBank(id: string) {
+  const rows = await db()`SELECT * FROM banks WHERE id = ${id}`;
+  return rows[0] ? toBank(rows[0]) : null;
+}
+
+export async function createBank(b: BankInput) {
+  const id = `b${crypto.randomUUID().replace(/-/g, "").slice(0, 10)}`;
+  const rows = await db()`
+    INSERT INTO banks (id, name, interest, up_to, months, verified, active)
+    VALUES (${id}, ${b.name}, ${b.interest}, ${b.upTo}, ${b.months}, ${b.verified}, ${b.active})
+    RETURNING *`;
+  return toBank(rows[0]);
+}
+
+export async function updateBank(id: string, b: BankInput) {
+  const rows = await db()`
+    UPDATE banks SET name = ${b.name}, interest = ${b.interest}, up_to = ${b.upTo}, months = ${b.months},
+                     verified = ${b.verified}, active = ${b.active}
+    WHERE id = ${id} RETURNING *`;
+  return rows[0] ? toBank(rows[0]) : null;
+}
+
+// Saves the new logo URL (or NULL) and returns the one it replaced, or undefined if
+// there's no such bank.
+export async function setBankLogo(id: string, url: string | null) {
+  const rows = await db()`
+    UPDATE banks b SET logo_url = ${url}
+    FROM (SELECT logo_url FROM banks WHERE id = ${id}) old
+    WHERE b.id = ${id}
+    RETURNING old.logo_url AS previous`;
+  return rows[0] ? ((rows[0].previous as string | null) ?? null) : undefined;
+}
+
+// Loans per bank by status, for the admin page.
+export async function loanCountsByBank() {
+  const rows = await db()`SELECT bank, status, count(*)::integer AS n FROM loans GROUP BY bank, status`;
+  const counts: Record<string, Partial<Record<Loan["status"], number>>> = {};
+  for (const r of rows) (counts[r.bank] ??= {})[r.status as Loan["status"]] = r.n;
+  return counts;
 }

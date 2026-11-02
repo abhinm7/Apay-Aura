@@ -9,12 +9,12 @@ function key() {
   return new TextEncoder().encode(secret);
 }
 
-export function signToken(userId: string) {
+export function signToken(subject: string, expiresIn = "30d") {
   return new SignJWT({})
     .setProtectedHeader({ alg: "HS256" })
-    .setSubject(userId)
+    .setSubject(subject)
     .setIssuedAt()
-    .setExpirationTime("30d")
+    .setExpirationTime(expiresIn)
     .sign(key());
 }
 

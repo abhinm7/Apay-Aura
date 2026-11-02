@@ -155,6 +155,29 @@ body {
   .typing-dot { animation: none; opacity: 0.6; }
 }
 
+/* Empty-state illustrations (loans page). */
+.float { animation: float 3.2s ease-in-out infinite; }
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+.twinkle {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: twinkle 2.4s ease-in-out infinite;
+}
+@keyframes twinkle {
+  0%, 100% { opacity: 0.35; transform: scale(0.7); }
+  50% { opacity: 1; transform: scale(1); }
+}
+.sand-fall { animation: sand-fall 0.9s linear infinite; }
+@keyframes sand-fall {
+  to { stroke-dashoffset: -6; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .float, .twinkle, .sand-fall { animation: none; }
+}
+
 /* Scrolls normally, just without a visible scrollbar. */
 .no-scrollbar { scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }

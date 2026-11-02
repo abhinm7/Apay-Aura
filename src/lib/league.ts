@@ -25,5 +25,5 @@ export function leagueStatus(balance: number): LeagueStatus {
   const next = LEAGUES[index + 1];
   if (!next) return { index, toNext: null, progress: 1 };
   const floor = LEAGUES[index].min;
-  return { index, toNext: next.min - balance, progress: (balance - floor) / (next.min - floor) };
+  return { index, toNext: next.min - balance, progress: Math.max(0, (balance - floor) / (next.min - floor)) };
 }

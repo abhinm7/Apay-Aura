@@ -7,7 +7,7 @@ import HomeHeader from "@/components/HomeHeader";
 import HomeMenu from "@/components/HomeMenu";
 // import NotificationPrompt from "@/components/NotificationPrompt";
 import QuickActions from "@/components/QuickActions";
-import { getLeague, getUserById, listFriends } from "@/lib/queries";
+import { getLeague, getUserById, listFriends, settleLoans } from "@/lib/queries";
 import { currentUserId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +21,7 @@ export default async function Home() {
   const user = me ? await getUserById(me) : null;
   if (!user) redirect("/api/auth/logout");
 
+  await settleLoans(user.id);
   const [friends, league] = await Promise.all([listFriends(user.id), getLeague(user.id)]);
 
   return (

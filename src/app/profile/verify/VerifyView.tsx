@@ -13,7 +13,7 @@ import { api, errorMessage, uploadAvatar } from "@/lib/client";
 import { auraId } from "@/lib/validate";
 import { MAX_ADDRESS, OCCUPATIONS, VERIFY_FEE, type Occupation } from "@/lib/verification";
 
-const fee = VERIFY_FEE.toLocaleString();
+const fee = VERIFY_FEE.toLocaleString("en-IN");
 
 export default function VerifyView({
   name,

@@ -6,7 +6,7 @@ export async function api<T = Record<string, unknown>>(path: string, body?: unkn
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
-  if (res.status === 401 && !path.startsWith("/api/auth/")) window.location.href = "/login";
+  if (res.status === 401 && !/^\/api\/(auth|admin)\//.test(path)) window.location.href = "/login";
   if (!res.ok) throw new ApiError(data.error ?? "Something went wrong", data);
   return data as T;
 }
@@ -41,11 +41,14 @@ export async function squareImage(file: File, size = 256): Promise<Blob> {
   return blob;
 }
 
-// Crops, shrinks and uploads a new profile picture; returns its URL.
-export async function uploadAvatar(file: File): Promise<string> {
+// Crops, shrinks and uploads a square image to `path` (which answers { url }); returns its URL.
+export async function uploadImage(path: string, file: File): Promise<string> {
   const image = await squareImage(file);
-  const res = await fetch("/api/profile/avatar", { method: "POST", headers: { "Content-Type": image.type }, body: image });
+  const res = await fetch(path, { method: "POST", headers: { "Content-Type": image.type }, body: image });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && !path.startsWith("/api/admin/")) window.location.href = "/login";
   if (!res.ok) throw new Error(data.error ?? "Couldn't upload that photo");
-  return data.avatarUrl;
+  return data.url;
 }
+
+export const uploadAvatar = (file: File) => uploadImage("/api/profile/avatar", file);

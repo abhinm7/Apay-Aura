@@ -101,3 +101,82 @@ CREATE TABLE IF NOT EXISTS verifications (
   fee            integer NOT NULL CHECK (fee >= 0),
   created_at     timestamptz NOT NULL DEFAULT now()
 );
+
+-- Aura loans (see src/lib/loans.ts). Applying creates a 'pending' row; approval
+-- ('ongoing') and closing are done manually in the DB for now. Interest and
+-- tenure are copied from the offer at the time of applying.
+CREATE TABLE IF NOT EXISTS loans (
+  id          bigserial PRIMARY KEY,
+  user_id     uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  bank        text NOT NULL,
+  amount      integer NOT NULL CHECK (amount > 0),
+  interest    integer NOT NULL CHECK (interest >= 0),
+  months      integer NOT NULL CHECK (months > 0),
+  status      text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'ongoing', 'closed')),
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  approved_at timestamptz,
+  closed_at   timestamptz
+);
+
+CREATE INDEX IF NOT EXISTS loans_user_idx ON loans (user_id, id);
+-- One open (pending or ongoing) loan per bank per user.
+CREATE UNIQUE INDEX IF NOT EXISTS loans_open_idx ON loans (user_id, bank) WHERE status IN ('pending', 'ongoing');
+
+-- Loan v2: fees taken from the payout, weekly EMIs, auto-approval after 2 minutes
+-- (or instantly for a 5% fee). See src/lib/loans.ts and settleLoans().
+-- fees: tax + processing + GST + platform. received: amount - fees, credited on
+-- approval. total: amount + interest, repaid by `weeks` weekly EMIs of `emi` (the
+-- last one is total - emi * (weeks - 1)). approve_at: auto-approval time.
+-- instant_fee: paid to skip the wait.
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS fees        integer NOT NULL DEFAULT 0;
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS received    integer NOT NULL DEFAULT 0;
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS total       integer NOT NULL DEFAULT 0;
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS weeks       integer NOT NULL DEFAULT 0;
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS emi         integer NOT NULL DEFAULT 0;
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS emis_paid   integer NOT NULL DEFAULT 0;
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS approve_at  timestamptz;
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS instant_fee integer NOT NULL DEFAULT 0;
+
+-- Fill those in for loans applied for before they existed (same maths as loanQuote()).
+UPDATE loans SET
+  fees       = amount * 6 / 100 + amount * 2 / 100 + amount / 100 + amount / 100,
+  received   = amount - (amount * 6 / 100 + amount * 2 / 100 + amount / 100 + amount / 100),
+  total      = amount + round(amount * interest * months / 100.0)::integer,
+  weeks      = months * 4,
+  emi        = ceil((amount + round(amount * interest * months / 100.0)) / (months * 4.0))::integer,
+  approve_at = COALESCE(approve_at, created_at + interval '2 minutes')
+WHERE weeks = 0;
+
+-- EMIs are taken even when they push the balance below zero. Payments and the
+-- verified badge still check the balance themselves.
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_balance_check;
+
+-- Loan banks, edited at /admin. Loans copy interest/tenure when applied for, so
+-- edits only affect new loans. Hidden (active = false) banks can't be applied to.
+CREATE TABLE IF NOT EXISTS banks (
+  id         text PRIMARY KEY,
+  name       text NOT NULL,
+  interest   integer NOT NULL CHECK (interest >= 0),
+  up_to      integer NOT NULL CHECK (up_to > 0),
+  months     integer NOT NULL CHECK (months > 0),
+  verified   boolean NOT NULL DEFAULT false,
+  logo_url   text,
+  active     boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- The original built-in offers.
+INSERT INTO banks (id, name, interest, up_to, months, verified, created_at) VALUES
+  ('abi', 'Aura Bank of India', 10, 50000, 3, false, '2026-11-01 00:00:01+00'),
+  ('apay', 'apay Official', 8, 25000, 2, true, '2026-11-01 00:00:02+00'),
+  ('syndicate', 'Aura Syndicate', 12, 100000, 6, false, '2026-11-01 00:00:03+00'),
+  ('auriano', 'Auriano', 15, 20000, 1, false, '2026-11-01 00:00:04+00'),
+  ('acl', 'Aura Corporation Limited', 9, 75000, 4, false, '2026-11-01 00:00:05+00')
+ON CONFLICT (id) DO NOTHING;
+
+-- Wrong admin PIN attempts (one row; see src/lib/admin.ts).
+CREATE TABLE IF NOT EXISTS admin_lock (
+  id           integer PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  failed       integer NOT NULL DEFAULT 0,
+  locked_until timestamptz
+);
