@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { leagueStatus } from "./league";
 import { APPROVAL_WAIT_MS, INSTANT_APPROVAL_PERCENT, loanQuote, WEEK_MS, type Bank, type BankInput, type Loan } from "./loans";
+import { EMPTY_BOARD, TURN_SECONDS, timeOut, type Bet, type Game, type Step } from "./bet";
 import { auraTax } from "./tax";
 import { VERIFY_FEE, type Occupation } from "./verification";
 
@@ -17,10 +18,11 @@ export type Activity = "typing" | "paying";
 export type Message = {
   id: string;
   mine: boolean;
-  kind: "text" | "payment";
+  kind: "text" | "payment" | "bet";
   body: string;
   amount: number | null;
   tax: number;
+  betId: string | null;
   createdAt: string;
 };
 
@@ -42,6 +44,7 @@ const toMessage = (r: Row): Message => ({
   body: r.body,
   amount: r.amount,
   tax: r.tax ?? 0,
+  betId: r.bet_id ? String(r.bet_id) : null,
   createdAt: new Date(r.created_at).toISOString(),
 });
 
@@ -253,13 +256,13 @@ export async function addFriendship(a: string, b: string) {
 export async function listMessages(me: string, other: string, afterId?: string) {
   const rows = afterId
     ? await db()`
-        SELECT id, sender_id = ${me} AS mine, kind, body, amount, tax, created_at FROM messages
+        SELECT id, sender_id = ${me} AS mine, kind, body, amount, tax, bet_id, created_at FROM messages
         WHERE ((sender_id = ${me} AND receiver_id = ${other}) OR (sender_id = ${other} AND receiver_id = ${me}))
           AND id > ${afterId}
         ORDER BY id`
     : await db()`
         SELECT * FROM (
-          SELECT id, sender_id = ${me} AS mine, kind, body, amount, tax, created_at FROM messages
+          SELECT id, sender_id = ${me} AS mine, kind, body, amount, tax, bet_id, created_at FROM messages
           WHERE (sender_id = ${me} AND receiver_id = ${other}) OR (sender_id = ${other} AND receiver_id = ${me})
           ORDER BY id DESC LIMIT 100
         ) recent ORDER BY id`;
@@ -499,4 +502,179 @@ export async function loanCountsByBank() {
   const counts: Record<string, Partial<Record<Loan["status"], number>>> = {};
   for (const r of rows) (counts[r.bank] ??= {})[r.status as Loan["status"]] = r.n;
   return counts;
+}
+
+// ---- Aura betting ----
+
+const toGame = (r: Row): Game => ({
+  challengerId: r.challenger_id,
+  opponentId: r.opponent_id,
+  stake: r.stake,
+  status: r.status,
+  board: r.board,
+  round: r.round,
+  turnId: r.turn_id,
+  challengerWins: r.challenger_wins,
+  opponentWins: r.opponent_wins,
+  lastBoard: r.last_board,
+  lastResult: r.last_result,
+  winnerId: r.winner_id,
+  forfeitBy: r.forfeit_by,
+});
+
+// Rows come joined with the other player (name, handle, verified, avatar_url).
+function toBet(r: Row, me: string): Bet {
+  const g = toGame(r);
+  const mine = me === g.challengerId ? "challenger" : "opponent";
+  return {
+    id: String(r.id),
+    stake: g.stake,
+    status: g.status,
+    byMe: mine === "challenger",
+    other: { name: r.name, handle: r.handle, verified: r.verified, avatarUrl: r.avatar_url },
+    board: g.board,
+    round: g.round,
+    myMark: mine === "challenger" ? "X" : "O",
+    myTurn: g.turnId === me,
+    turnDeadline: r.turn_deadline ? new Date(r.turn_deadline).toISOString() : null,
+    myWins: mine === "challenger" ? g.challengerWins : g.opponentWins,
+    theirWins: mine === "challenger" ? g.opponentWins : g.challengerWins,
+    lastBoard: g.lastBoard,
+    lastResult: g.lastResult === null ? null : g.lastResult === "draw" ? "draw" : g.lastResult === mine ? "me" : "them",
+    result: g.status !== "finished" ? null : g.winnerId === null ? "tie" : g.winnerId === me ? "won" : "lost",
+    forfeitedByMe: g.forfeitBy ? g.forfeitBy === me : null,
+    version: r.version,
+    createdAt: new Date(r.created_at).toISOString(),
+  };
+}
+
+async function betRow(me: string, id: string) {
+  const rows = await db()`
+    SELECT b.*, u.name, u.handle, u.verified, u.avatar_url
+    FROM bets b JOIN users u ON u.id = CASE WHEN b.challenger_id = ${me} THEN b.opponent_id ELSE b.challenger_id END
+    WHERE b.id = ${id} AND ${me} IN (b.challenger_id, b.opponent_id)`;
+  return rows[0] ?? null;
+}
+
+// Takes the challenger's stake and creates the bet plus its chat message, in one
+// statement. Returns the bet id, or null if the balance is too low.
+export async function createBet(me: string, opponentId: string, stake: number) {
+  const rows = await db()`
+    WITH debit AS (
+      UPDATE users SET balance = balance - ${stake} WHERE id = ${me} AND balance >= ${stake} RETURNING id
+    ), bet AS (
+      INSERT INTO bets (challenger_id, opponent_id, stake)
+      SELECT ${me}::uuid, ${opponentId}::uuid, ${stake}::integer WHERE EXISTS (SELECT 1 FROM debit)
+      RETURNING id
+    ), msg AS (
+      INSERT INTO messages (sender_id, receiver_id, kind, bet_id)
+      SELECT ${me}::uuid, ${opponentId}::uuid, 'bet', id FROM bet
+    ), link AS (
+      INSERT INTO friendships (user_id, friend_id)
+      SELECT ${me}::uuid, ${opponentId}::uuid FROM bet
+      UNION ALL SELECT ${opponentId}::uuid, ${me}::uuid FROM bet
+      ON CONFLICT DO NOTHING
+    )
+    SELECT id FROM bet`;
+  return rows[0] ? String(rows[0].id) : null;
+}
+
+// Writes a step if nobody changed the bet since `version`, paying out in the same
+// statement. Returns false if it lost a race.
+async function commitStep(id: string, version: number, step: Step) {
+  const g = step.next;
+  const rows = await db()`
+    WITH upd AS (
+      UPDATE bets SET
+        status = ${g.status}, board = ${g.board}, round = ${g.round}, turn_id = ${g.turnId},
+        turn_deadline = CASE WHEN ${g.status} = 'active' THEN now() + ${`${TURN_SECONDS} seconds`}::interval END,
+        challenger_wins = ${g.challengerWins}, opponent_wins = ${g.opponentWins},
+        last_board = ${g.lastBoard}, last_result = ${g.lastResult}, winner_id = ${g.winnerId},
+        forfeit_by = ${g.forfeitBy}, version = version + 1, updated_at = now()
+      WHERE id = ${id} AND version = ${version}
+      RETURNING id
+    ), pay AS (
+      UPDATE users SET balance = balance + CASE WHEN id = ${g.challengerId}::uuid
+                                                THEN ${step.payout.challenger}::integer
+                                                ELSE ${step.payout.opponent}::integer END
+      WHERE id IN (${g.challengerId}::uuid, ${g.opponentId}::uuid)
+        AND ${step.payout.challenger + step.payout.opponent}::integer > 0
+        AND EXISTS (SELECT 1 FROM upd)
+    )
+    SELECT id FROM upd`;
+  return rows.length > 0;
+}
+
+// The bet as `me` sees it, after applying a timed-out turn if there is one.
+export async function getBet(me: string, id: string): Promise<Bet | null> {
+  let row = await betRow(me, id);
+  if (row?.status === "active" && row.turn_deadline && new Date(row.turn_deadline) <= new Date()) {
+    await commitStep(id, row.version, timeOut(toGame(row)));
+    row = await betRow(me, id);
+  }
+  return row ? toBet(row, me) : null;
+}
+
+// Applies a rule (move, forfeit) to the bet's current state. Returns an error message or null.
+export async function applyToBet(me: string, id: string, rule: (g: Game) => Step | string) {
+  const row = await betRow(me, id);
+  if (!row) return "Game not found";
+  const step = rule(toGame(row));
+  if (typeof step === "string") return step;
+  return (await commitStep(id, row.version, step)) ? null : "The game changed, try again";
+}
+
+// The opponent accepts: claims the bet, then takes their stake. Returns an error message or null.
+export async function acceptBet(me: string, id: string) {
+  const rows = await db()`
+    WITH claimed AS (
+      UPDATE bets SET status = 'active', board = ${EMPTY_BOARD}, turn_id = challenger_id,
+                      turn_deadline = now() + ${`${TURN_SECONDS} seconds`}::interval,
+                      version = version + 1, updated_at = now()
+      WHERE id = ${id} AND opponent_id = ${me} AND status = 'pending'
+        AND (SELECT balance FROM users WHERE id = ${me}) >= stake
+      RETURNING stake
+    )
+    UPDATE users SET balance = balance - c.stake FROM claimed c WHERE users.id = ${me}
+    RETURNING users.id`;
+  if (rows.length) return null;
+  const row = await betRow(me, id);
+  if (!row || row.opponent_id !== me) return "Game not found";
+  if (row.status !== "pending") return "This challenge isn't open anymore";
+  return `You need ✦ ${row.stake.toLocaleString("en-IN")} to accept`;
+}
+
+// Declined by the opponent or cancelled by the challenger: refunds the challenger's stake.
+export async function withdrawBet(me: string, id: string, as: "declined" | "cancelled") {
+  const byOpponent = as === "declined";
+  const rows = await db()`
+    WITH c AS (
+      UPDATE bets SET status = ${as}, version = version + 1, updated_at = now()
+      WHERE id = ${id} AND status = 'pending'
+        AND ((${byOpponent} AND opponent_id = ${me}) OR (NOT ${byOpponent} AND challenger_id = ${me}))
+      RETURNING challenger_id, stake
+    )
+    UPDATE users SET balance = balance + c.stake FROM c WHERE users.id = c.challenger_id
+    RETURNING users.id`;
+  return rows.length > 0;
+}
+
+// Pending and live games for the Earn aura sheet, newest first.
+export async function listOpenBets(me: string): Promise<Bet[]> {
+  const rows = await db()`
+    SELECT b.*, u.name, u.handle, u.verified, u.avatar_url
+    FROM bets b JOIN users u ON u.id = CASE WHEN b.challenger_id = ${me} THEN b.opponent_id ELSE b.challenger_id END
+    WHERE ${me} IN (b.challenger_id, b.opponent_id) AND b.status IN ('pending', 'active')
+    ORDER BY b.id DESC LIMIT 20`;
+  return rows.map((r) => toBet(r, me));
+}
+
+// Recent bets between two people, for the chat's challenge cards.
+export async function listBetsBetween(me: string, other: string): Promise<Bet[]> {
+  const rows = await db()`
+    SELECT b.*, u.name, u.handle, u.verified, u.avatar_url
+    FROM bets b JOIN users u ON u.id = ${other}
+    WHERE (b.challenger_id = ${me} AND b.opponent_id = ${other}) OR (b.challenger_id = ${other} AND b.opponent_id = ${me})
+    ORDER BY b.id DESC LIMIT 30`;
+  return rows.map((r) => toBet(r, me));
 }

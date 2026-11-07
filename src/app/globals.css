@@ -178,6 +178,16 @@ body {
   .float, .twinkle, .sand-fall { animation: none; }
 }
 
+/* Tic-tac-toe marks pop in (aura bets). */
+.mark-pop { animation: mark-pop 220ms cubic-bezier(0.2, 0.8, 0.2, 1.4); }
+@keyframes mark-pop {
+  from { transform: scale(0.4); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mark-pop { animation: none; }
+}
+
 /* Scrolls normally, just without a visible scrollbar. */
 .no-scrollbar { scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }

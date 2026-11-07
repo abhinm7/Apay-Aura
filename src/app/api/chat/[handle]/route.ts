@@ -7,6 +7,7 @@ import {
   getUserByHandle,
   getUserById,
   insertTextMessage,
+  listBetsBetween,
   listMessages,
   markRead,
   setActivity,
@@ -29,13 +30,15 @@ export async function GET(req: NextRequest, ctx: Ctx) {
 
   const after = req.nextUrl.searchParams.get("after");
   const afterId = after && /^\d+$/.test(after) ? after : undefined;
-  const [messages, activity] = await Promise.all([
+  const [messages, activity, bets] = await Promise.all([
     listMessages(r.me, r.friend.id, afterId),
     getActivity(r.friend.id, r.me),
+    listBetsBetween(r.me, r.friend.id),
   ]);
   // The chat is open, so anything new from them is now read.
   if (messages.some((m) => !m.mine)) await markRead(r.me, r.friend.id);
-  return ok({ messages, activity });
+  // Challenge cards show live status, so their bets come with every poll.
+  return ok({ messages, activity, bets });
 }
 
 export async function POST(req: Request, ctx: Ctx) {

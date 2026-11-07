@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Wordmark } from "@/components/AuthShell";
 import BalanceCard from "@/components/BalanceCard";
+import EarnAura from "@/components/EarnAura";
 import FriendSearch from "@/components/FriendSearch";
 import FriendsGrid from "@/components/FriendsGrid";
 import HomeHeader from "@/components/HomeHeader";
@@ -40,6 +41,7 @@ export default async function Home() {
       />
       <BalanceCard hasPin={user.hasPin} />
       <QuickActions name={user.name} handle={user.handle} verified={user.verified} />
+      <EarnAura friends={friends} hasPin={user.hasPin} />
       {/* Push notifications temporarily disabled: uncomment to bring the prompt back. */}
       {/* <NotificationPrompt /> */}
       <Divider />

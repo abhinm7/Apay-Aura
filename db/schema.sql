@@ -180,3 +180,36 @@ CREATE TABLE IF NOT EXISTS admin_lock (
   failed       integer NOT NULL DEFAULT 0,
   locked_until timestamptz
 );
+
+-- Aura betting: best-of-3 tic-tac-toe for a stake (see src/lib/bet.ts). Each player's
+-- stake is taken when they commit (challenge / accept); the pot goes to the winner,
+-- or back to both on a tie. `version` guards every update against races.
+CREATE TABLE IF NOT EXISTS bets (
+  id              bigserial PRIMARY KEY,
+  challenger_id   uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  opponent_id     uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  stake           integer NOT NULL CHECK (stake > 0),
+  status          text NOT NULL DEFAULT 'pending'
+                  CHECK (status IN ('pending', 'active', 'finished', 'declined', 'cancelled')),
+  board           text NOT NULL DEFAULT '.........',
+  round           integer NOT NULL DEFAULT 1,
+  turn_id         uuid,
+  turn_deadline   timestamptz,
+  challenger_wins integer NOT NULL DEFAULT 0,
+  opponent_wins   integer NOT NULL DEFAULT 0,
+  last_board      text,
+  last_result     text CHECK (last_result IN ('challenger', 'opponent', 'draw')),
+  winner_id       uuid,
+  forfeit_by      uuid,
+  version         integer NOT NULL DEFAULT 0,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at      timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS bets_challenger_idx ON bets (challenger_id, id);
+CREATE INDEX IF NOT EXISTS bets_opponent_idx ON bets (opponent_id, id);
+
+-- Challenges show up in chat as a 'bet' message pointing at the bet.
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS bet_id bigint REFERENCES bets(id) ON DELETE CASCADE;
+ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_kind_check;
+ALTER TABLE messages ADD CONSTRAINT messages_kind_check CHECK (kind IN ('text', 'payment', 'bet'));

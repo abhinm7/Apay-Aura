@@ -1,12 +1,16 @@
 "use client";
 
+import { Swords } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Avatar from "@/components/Avatar";
+import ChallengeSheet from "@/components/ChallengeSheet";
+import { betStatusLine } from "@/components/EarnAura";
 import PinSheet from "@/components/PinSheet";
 import Sheet from "@/components/Sheet";
 import VerifiedName from "@/components/VerifiedName";
 import { BackIcon, CheckIcon, SendIcon } from "@/components/icons";
+import type { Bet } from "@/lib/bet";
 import { api, errorMessage } from "@/lib/client";
 import type { Activity, Friend, Message } from "@/lib/queries";
 import { auraTax, TAX_PERCENT, TAX_THRESHOLD } from "@/lib/tax";
@@ -30,10 +34,13 @@ function dayLabel(iso: string) {
 }
 
 // openPay: arrived from a scanned QR (?pay=1), so start on the pay screen.
-type Props = { friend: Friend; hasPin: boolean; initialMessages: Message[]; openPay?: boolean };
+type Props = { friend: Friend; hasPin: boolean; initialMessages: Message[]; initialBets: Bet[]; openPay?: boolean };
 
-export default function ChatView({ friend, hasPin: initialHasPin, initialMessages, openPay = false }: Props) {
+export default function ChatView({ friend, hasPin: initialHasPin, initialMessages, initialBets, openPay = false }: Props) {
   const [messages, setMessages] = useState(initialMessages);
+  // Live status for the challenge cards, refreshed by every poll.
+  const [bets, setBets] = useState(() => new Map(initialBets.map((b) => [b.id, b])));
+  const [challengeOpen, setChallengeOpen] = useState(false);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [hasPin, setHasPin] = useState(initialHasPin);
@@ -110,10 +117,11 @@ export default function ChatView({ friend, hasPin: initialHasPin, initialMessage
     const poll = setInterval(async () => {
       if (document.hidden) return;
       try {
-        const res = await api<{ messages: Message[]; activity: Activity | null }>(
+        const res = await api<{ messages: Message[]; activity: Activity | null; bets: Bet[] }>(
           `/api/chat/${friend.handle}?after=${lastId.current}`,
         );
         merge(res.messages);
+        setBets(new Map(res.bets.map((b) => [b.id, b])));
         setFriendActivity(res.activity);
       } catch {
         // Try again on the next tick.
@@ -245,7 +253,13 @@ export default function ChatView({ friend, hasPin: initialHasPin, initialMessage
                     {dayLabel(m.createdAt)}
                   </span>
                 )}
-                {m.kind === "payment" ? <PaymentBubble m={m} friendName={friend.name} /> : <TextBubble m={m} />}
+                {m.kind === "payment" ? (
+                  <PaymentBubble m={m} friendName={friend.name} />
+                ) : m.kind === "bet" ? (
+                  <BetBubble m={m} bet={m.betId ? bets.get(m.betId) : undefined} />
+                ) : (
+                  <TextBubble m={m} />
+                )}
               </li>
             );
           })}
@@ -268,6 +282,14 @@ export default function ChatView({ friend, hasPin: initialHasPin, initialMessage
         >
           Pay
         </button>
+        <button
+          type="button"
+          onClick={() => setChallengeOpen(true)}
+          aria-label={`Challenge ${friend.name} to tic-tac-toe`}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent active:opacity-80"
+        >
+          <Swords size={20} />
+        </button>
         <input
           value={text}
           onChange={(e) => onType(e.target.value)}
@@ -284,6 +306,8 @@ export default function ChatView({ friend, hasPin: initialHasPin, initialMessage
           <SendIcon width={20} height={20} />
         </button>
       </form>
+
+      {challengeOpen && <ChallengeSheet friend={friend} hasPin={hasPin} onClose={() => setChallengeOpen(false)} />}
 
       <Sheet open={payOpen} onClose={() => setPayOpen(false)}>
         <form onSubmit={proceedToPin} className="flex flex-col items-center text-center">
@@ -382,6 +406,39 @@ function ActivityBubble({ kind }: { kind: Activity }) {
         <span className="typing-dot [animation-delay:150ms]" />
         <span className="typing-dot [animation-delay:300ms]" />
       </span>
+    </div>
+  );
+}
+
+// A tic-tac-toe challenge, with its live status.
+function BetBubble({ m, bet }: { m: Message; bet?: Bet }) {
+  const live = bet && ((bet.status === "pending" && !bet.byMe) || (bet.status === "active" && bet.myTurn));
+  return (
+    <div className={`w-60 rounded-2xl border border-line bg-surface p-4 ${m.mine ? "self-end" : "self-start"}`}>
+      <p className="flex items-center gap-1.5 text-xs text-muted">
+        <Swords size={14} className="text-accent" /> Tic-tac-toe challenge
+      </p>
+      {bet ? (
+        <>
+          <p className="mt-1 text-2xl font-semibold tabular-nums">
+            <span className="mr-1 text-accent">✦</span>
+            {bet.stake.toLocaleString("en-IN")}
+            <span className="ml-1 text-sm font-normal text-muted">each</span>
+          </p>
+          <p className={`mt-1 text-sm ${live ? "font-medium text-accent" : "text-muted"}`}>{betStatusLine(bet)}</p>
+          <Link
+            href={`/bet/${bet.id}`}
+            className={`mt-3 flex h-10 items-center justify-center rounded-xl text-sm font-semibold ${
+              live ? "bg-accent text-on-accent" : "bg-accent-soft text-accent"
+            }`}
+          >
+            {bet.status === "pending" && !bet.byMe ? "View challenge" : bet.status === "active" ? "Play" : "Open"}
+          </Link>
+        </>
+      ) : (
+        <p className="mt-1 text-sm text-muted">Loading…</p>
+      )}
+      <p className="mt-2 text-right text-[10px] text-muted">{time(m.createdAt)}</p>
     </div>
   );
 }
